@@ -1,6 +1,6 @@
-# [Project name]
+# Digital Life
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Digital Life is a mobile visual progress journal for tracking people and projects over time with aligned photos, check-in reminders, and finished timelines.
 
 ## Run & Operate
 
@@ -22,15 +22,26 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/diditallifea/app/index.tsx` — project home, creation flow, and reminder settings
+- `artifacts/diditallifea/app/project.tsx` — project detail and captured frame history
+- `artifacts/diditallifea/app/capture.tsx` — camera/library capture and ghost-image alignment
+- `artifacts/diditallifea/app/timeline.tsx` — chronological merged journey view
+- `artifacts/diditallifea/context/ProjectContext.tsx` — AsyncStorage-backed project and photo state
+- `artifacts/diditallifea/constants/colors.ts` — product theme tokens
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first build is local-first with AsyncStorage so projects and photo metadata persist on-device without requiring an account or backend.
+- The latest saved photo is used as the ghost reference for the next frame; users can tune its opacity before saving.
+- The timeline is an in-app stitched presentation of all frames in chronological order, with a then/now comparison for finished stories.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Create named projects with a subject and location.
+- Capture a photo with the device camera or upload from the photo library.
+- Align the new frame against the previous frame using a translucent ghost overlay.
+- Set weekly, fortnightly, or monthly check-in reminders.
+- Review all frames as a start-to-finish journey and mark projects finished.
 
 ## User preferences
 

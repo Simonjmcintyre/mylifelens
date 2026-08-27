@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "DiditallifeA"
+description = "A mobile progress journal for documenting people and projects over time. Users can capture or upload progress photos, align new images against the previous one with a ghost overlay, schedule reminders, and merge a completed timeline into a start-to-finish story."
+version = "1.0.0"
+id = "artifacts/diditallifea"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 18112
+
+[services.development]
+run = "pnpm --filter @workspace/diditallifea run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/diditallifea", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/diditallifea", "run", "serve" ]
+
+[services.env]
+PORT = "18112"
+BASE_PATH = "/"
