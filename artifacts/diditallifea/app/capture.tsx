@@ -4,8 +4,8 @@ import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { Alert, Image, PanResponder, PanResponderGestureState, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CaptureScreen() {
@@ -17,8 +17,30 @@ export default function CaptureScreen() {
   const previous = project?.photos[project.photos.length - 1];
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.45);
+  const [ghostOffset, setGhostOffset] = useState({ x: 0, y: 0 });
   const [isSaving, setIsSaving] = useState(false);
   const [note, setNote] = useState('Aligned to the previous frame');
+  const ghostOffsetRef = useRef({ x: 0, y: 0 });
+  const dragOrigin = useRef({ x: 0, y: 0 });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        dragOrigin.current = ghostOffsetRef.current;
+      },
+      onPanResponderMove: (_event, gesture: PanResponderGestureState) => {
+        const next = {
+          x: dragOrigin.current.x + gesture.dx,
+          y: dragOrigin.current.y + gesture.dy,
+        };
+        ghostOffsetRef.current = next;
+        setGhostOffset(next);
+      },
+      onPanResponderRelease: () => undefined,
+      onPanResponderTerminate: () => undefined,
+    }),
+  ).current;
 
   const previousLabel = useMemo(() => (previous ? `Frame ${String(project?.photos.length).padStart(2, '0')}` : 'No previous frame'), [previous, project?.photos.length]);
 
@@ -52,12 +74,12 @@ export default function CaptureScreen() {
 
         <View style={[styles.preview, { backgroundColor: colors.foreground }]}>
           {selectedUri ? <Image source={{ uri: selectedUri }} style={styles.previewImage} resizeMode="cover" /> : <View style={styles.previewEmpty}><Feather name="camera" size={34} color="#C7D4CB" /><Text style={[styles.previewEmptyTitle, { color: colors.background }]}>Choose how to add this frame</Text><Text style={[styles.previewEmptyBody, { color: '#C7D4CB' }]}>Take a fresh photo or pick one from your library.</Text></View>}
-          {selectedUri && previous && <View pointerEvents="none" style={[styles.ghostLayer, { opacity }]}><PhotoImage uri={previous.uri} style={styles.previewImage} resizeMode="cover" /></View>}
+          {selectedUri && previous && <View {...panResponder.panHandlers} style={[styles.ghostLayer, { opacity, transform: [{ translateX: ghostOffset.x }, { translateY: ghostOffset.y }] }]}><PhotoImage uri={previous.uri} style={styles.previewImage} resizeMode="cover" /></View>}
           {selectedUri && previous && <View style={[styles.ghostBadge, { backgroundColor: colors.primary }]}><Feather name="layers" size={13} color={colors.primaryForeground} /><Text style={[styles.ghostBadgeText, { color: colors.primaryForeground }]}>Ghost {Math.round(opacity * 100)}%</Text></View>}
           {selectedUri && <View style={styles.crosshair}><View style={[styles.crosshairH, { backgroundColor: colors.primary }]} /><View style={[styles.crosshairV, { backgroundColor: colors.primary }]} /></View>}
         </View>
 
-        {selectedUri && previous && <View style={styles.alignmentPanel}><View style={styles.alignmentHeading}><View><Text style={[styles.panelTitle, { color: colors.foreground }]}>Ghost strength</Text><Text style={[styles.panelHint, { color: colors.mutedForeground }]}>Adjust until the edges overlap</Text></View><Text style={[styles.percent, { color: colors.primary }]}>{Math.round(opacity * 100)}%</Text></View><View style={styles.opacityRow}><Pressable testID="ghost-decrease" onPress={() => setOpacity(Math.max(0.15, Number((opacity - 0.1).toFixed(2))))} style={[styles.opacityButton, { borderColor: colors.border }]}><Feather name="minus" size={17} color={colors.foreground} /></Pressable><View style={[styles.track, { backgroundColor: colors.muted }]}><View style={[styles.trackFill, { backgroundColor: colors.primary, width: `${opacity * 100}%` }]} /></View><Pressable testID="ghost-increase" onPress={() => setOpacity(Math.min(0.8, Number((opacity + 0.1).toFixed(2))))} style={[styles.opacityButton, { borderColor: colors.border }]}><Feather name="plus" size={17} color={colors.foreground} /></Pressable></View><View style={styles.alignedNote}><Feather name="check-circle" size={15} color={colors.secondaryForeground} /><Text style={[styles.alignedText, { color: colors.secondaryForeground }]}>Ghosting {previousLabel} for alignment</Text></View></View>}
+        {selectedUri && previous && <View style={styles.alignmentPanel}><View style={styles.alignmentHeading}><View><Text style={[styles.panelTitle, { color: colors.foreground }]}>Line up the ghost</Text><Text style={[styles.panelHint, { color: colors.mutedForeground }]}>Drag the ghost image over your new photo</Text></View><Pressable testID="reset-alignment" onPress={() => { ghostOffsetRef.current = { x: 0, y: 0 }; setGhostOffset({ x: 0, y: 0 }); }}><Text style={[styles.resetText, { color: colors.primary }]}>Reset</Text></Pressable></View><View style={styles.nudgeRow}><Pressable testID="nudge-left" onPress={() => { const next = { x: ghostOffsetRef.current.x - 4, y: ghostOffsetRef.current.y }; ghostOffsetRef.current = next; setGhostOffset(next); }} style={[styles.nudgeButton, { borderColor: colors.border }]}><Feather name="chevron-left" size={18} color={colors.foreground} /></Pressable><Pressable testID="nudge-up" onPress={() => { const next = { x: ghostOffsetRef.current.x, y: ghostOffsetRef.current.y - 4 }; ghostOffsetRef.current = next; setGhostOffset(next); }} style={[styles.nudgeButton, { borderColor: colors.border }]}><Feather name="chevron-up" size={18} color={colors.foreground} /></Pressable><Pressable testID="nudge-down" onPress={() => { const next = { x: ghostOffsetRef.current.x, y: ghostOffsetRef.current.y + 4 }; ghostOffsetRef.current = next; setGhostOffset(next); }} style={[styles.nudgeButton, { borderColor: colors.border }]}><Feather name="chevron-down" size={18} color={colors.foreground} /></Pressable><Pressable testID="nudge-right" onPress={() => { const next = { x: ghostOffsetRef.current.x + 4, y: ghostOffsetRef.current.y }; ghostOffsetRef.current = next; setGhostOffset(next); }} style={[styles.nudgeButton, { borderColor: colors.border }]}><Feather name="chevron-right" size={18} color={colors.foreground} /></Pressable><View style={[styles.alignmentChip, { backgroundColor: colors.accent }]}><Feather name="move" size={14} color={colors.accentForeground} /></View></View><View style={styles.opacityHeader}><Text style={[styles.panelTitle, { color: colors.foreground }]}>Ghost strength</Text><Text style={[styles.percent, { color: colors.primary }]}>{Math.round(opacity)}%</Text></View><View style={styles.opacityRow}><Pressable testID="ghost-decrease" onPress={() => setOpacity(Math.max(0.15, Number((opacity - 0.1).toFixed(2))))} style={[styles.opacityButton, { borderColor: colors.border }]}><Feather name="minus" size={17} color={colors.foreground} /></Pressable><View style={[styles.track, { backgroundColor: colors.muted }]}><View style={[styles.trackFill, { backgroundColor: colors.primary, width: `${opacity * 100}%` }]} /></View><Pressable testID="ghost-increase" onPress={() => setOpacity(Math.min(0.8, Number((opacity + 0.1).toFixed(2))))} style={[styles.opacityButton, { borderColor: colors.border }]}><Feather name="plus" size={17} color={colors.foreground} /></Pressable></View><View style={styles.alignedNote}><Feather name="check-circle" size={15} color={colors.secondaryForeground} /><Text style={[styles.alignedText, { color: colors.secondaryForeground }]}>Ghosting {previousLabel} for alignment</Text></View></View>}
 
         <View style={styles.choiceRow}><Pressable testID="take-photo-button" onPress={() => void choosePhoto('camera')} style={({ pressed }) => [styles.choiceButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}><Feather name="camera" size={20} color={colors.primaryForeground} /><Text style={[styles.choiceText, { color: colors.primaryForeground }]}>Take photo</Text></Pressable><Pressable testID="upload-photo-button" onPress={() => void choosePhoto('library')} style={({ pressed }) => [styles.choiceButton, { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]}><Feather name="upload" size={19} color={colors.foreground} /><Text style={[styles.choiceText, { color: colors.foreground }]}>Upload</Text></Pressable></View>
         {selectedUri && <><Text style={[styles.noteLabel, { color: colors.mutedForeground }]}>A note for this moment <Text style={{ fontFamily: 'Inter_400Regular' }}>(optional)</Text></Text><View style={[styles.noteBox, { backgroundColor: colors.card, borderColor: colors.border }]}><Feather name="edit-3" size={16} color={colors.mutedForeground} /><Text style={[styles.noteText, { color: colors.foreground }]}>{note}</Text></View><Pressable testID="save-progress-button" disabled={isSaving} onPress={() => void savePhoto()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.foreground }, pressed && styles.pressed, isSaving && { opacity: 0.55 }]}><Text style={[styles.saveText, { color: colors.background }]}>{isSaving ? 'Saving frame…' : 'Save progress frame'}</Text><Feather name="arrow-right" size={18} color={colors.background} /></Pressable></>}
@@ -84,6 +106,7 @@ const styles = StyleSheet.create({
   ghostLayer: { ...StyleSheet.absoluteFillObject },
   ghostBadge: { position: 'absolute', left: 14, top: 14, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 5 },
   ghostBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
+  resetText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   crosshair: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
   crosshairH: { width: '100%', height: 1, opacity: 0.75 },
   crosshairV: { position: 'absolute', width: 1, height: '100%', opacity: 0.75 },
@@ -92,6 +115,10 @@ const styles = StyleSheet.create({
   panelTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
   panelHint: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 3 },
   percent: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  nudgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 15 },
+  nudgeButton: { width: 34, height: 34, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  alignmentChip: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginLeft: 'auto' },
+  opacityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 },
   opacityRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 15 },
   opacityButton: { width: 34, height: 34, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   track: { height: 5, borderRadius: 3, flex: 1, overflow: 'hidden' },
