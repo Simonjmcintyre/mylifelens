@@ -3,8 +3,8 @@ import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Easing, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const dateLabel = (date: string) =>
@@ -17,10 +17,59 @@ export default function TimelineScreen() {
   const { projects, completeProject } = useProjects();
   const project = projects.find((item) => item.id === id);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [morphFrame, setMorphFrame] = useState(0);
+  const morphBlend = useRef(new Animated.Value(0)).current;
+  const photos = project?.photos ?? [];
+
+  useEffect(() => {
+    if (!isPlaying || photos.length < 2 || morphFrame >= photos.length - 1) return;
+    morphBlend.setValue(0);
+    const animation = Animated.timing(morphBlend, {
+      toValue: 1,
+      duration: 1800,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      if (morphFrame < photos.length - 2) {
+        setMorphFrame((current) => current + 1);
+      } else {
+        setIsPlaying(false);
+        setMorphFrame(photos.length - 1);
+        morphBlend.setValue(0);
+      }
+    });
+    return () => animation.stop();
+  }, [isPlaying, morphBlend, morphFrame, photos.length]);
 
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
+
+  const toggleMorph = () => {
+    if (photos.length < 2) {
+      Alert.alert('Add another frame first', 'The morph needs at least two progress photos to show a change over time.');
+      return;
+    }
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+    if (morphFrame >= photos.length - 1) {
+      setMorphFrame(0);
+      morphBlend.setValue(0);
+    }
+    setIsPlaying(true);
+  };
+
+  const resetMorph = () => {
+    setIsPlaying(false);
+    setMorphFrame(0);
+    morphBlend.stopAnimation();
+    morphBlend.setValue(0);
+  };
 
   const finish = async () => {
     setIsCompleting(true);
@@ -34,6 +83,19 @@ export default function TimelineScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }}>
         <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Timeline</Text><Pressable testID="share-timeline-button" onPress={() => void Share.share({ message: `${project.name} — ${project.photos.length} frames from start to finish.` })} style={styles.shareButton}><Feather name="share-2" size={19} color={colors.foreground} /></Pressable></View>
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
+
+        <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>
+          <View style={styles.morphStage}>
+            {photos.length > 0 ? <PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphImage} /> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
+            {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
+            {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
+          </View>
+          <View style={styles.morphControls}>
+            <View style={styles.morphCopy}><Text style={[styles.morphTitle, { color: colors.background }]}>Watch the change</Text><Text style={[styles.morphMeta, { color: '#C7D4CB' }]}>{photos.length > 0 ? `Frame ${morphFrame + 1} of ${photos.length}` : 'No frames yet'}</Text></View>
+            <View style={styles.morphButtons}><Pressable testID="restart-morph-button" onPress={resetMorph} style={[styles.morphIconButton, { borderColor: '#53635D' }]}><Feather name="rotate-ccw" size={16} color={colors.background} /></Pressable><Pressable testID="play-morph-button" onPress={toggleMorph} style={[styles.playButton, { backgroundColor: colors.primary }]}><Feather name={isPlaying ? 'pause' : 'play'} size={18} color={colors.primaryForeground} /></Pressable></View>
+          </View>
+          <View style={styles.progressRow}>{photos.map((photo, index) => <View key={photo.id} style={[styles.progressSegment, { backgroundColor: index <= morphFrame ? colors.primary : '#53635D' }]} />)}</View>
+        </View>
 
         {first && last && <View style={styles.comparison}><View style={styles.comparisonCard}><PhotoImage uri={first.uri} style={styles.comparisonImage} /><View style={styles.comparisonLabel}><Text style={[styles.comparisonEyebrow, { color: colors.primary }]}>THEN</Text><Text style={[styles.comparisonDate, { color: colors.background }]}>{dateLabel(first.capturedAt)}</Text></View></View><View style={[styles.arrowCircle, { backgroundColor: colors.primary }]}><Feather name="arrow-right" size={16} color={colors.primaryForeground} /></View><View style={styles.comparisonCard}><PhotoImage uri={last.uri} style={styles.comparisonImage} /><View style={styles.comparisonLabel}><Text style={[styles.comparisonEyebrow, { color: colors.primary }]}>NOW</Text><Text style={[styles.comparisonDate, { color: colors.background }]}>{dateLabel(last.capturedAt)}</Text></View></View></View>}
 
@@ -59,6 +121,23 @@ const styles = StyleSheet.create({
   eyebrow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.4 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 34, letterSpacing: -1.5, marginTop: 10 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10 },
+  morphCard: { marginHorizontal: 20, borderRadius: 21, padding: 12, overflow: 'hidden' },
+  morphStage: { height: 290, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphImage: { width: '100%', height: '100%' },
+  morphOverlay: { ...StyleSheet.absoluteFillObject },
+  morphEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  morphEmptyText: { fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 10 },
+  morphBadge: { position: 'absolute', top: 12, left: 12, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 11, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  morphBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 1.1 },
+  morphControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 3, paddingTop: 15, paddingBottom: 9 },
+  morphCopy: { flex: 1 },
+  morphTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  morphMeta: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 4 },
+  morphButtons: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  morphIconButton: { width: 35, height: 35, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  playButton: { width: 39, height: 39, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  progressRow: { flexDirection: 'row', gap: 4, paddingHorizontal: 3, paddingBottom: 2 },
+  progressSegment: { height: 3, borderRadius: 2, flex: 1 },
   comparison: { marginHorizontal: 20, height: 190, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   comparisonCard: { flex: 1, height: 190, borderRadius: 18, overflow: 'hidden', backgroundColor: '#17212B', position: 'relative' },
   comparisonImage: { width: '100%', height: '100%', opacity: 0.82 },
