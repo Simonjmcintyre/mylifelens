@@ -42,6 +42,7 @@ type AddProjectResult = { project: Project; reminderResult?: ReminderResult };
 export const REMINDER_OPTIONS = [
   { hours: 6, label: 'Every 6 hours', shortLabel: '6h' },
   { hours: 24, label: 'Every day', shortLabel: '1d' },
+  { hours: 48, label: 'Every other day', shortLabel: '2d' },
   { hours: 120, label: 'Every 5 days', shortLabel: '5d' },
   { hours: 168, label: 'Every week', shortLabel: '1w' },
   { hours: 336, label: 'Every 2 weeks', shortLabel: '2w' },
