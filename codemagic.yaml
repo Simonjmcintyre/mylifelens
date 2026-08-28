@@ -3,7 +3,7 @@ workflows:
     name: MyLifelens Android
     working_directory: artifacts/diditallifea
     max_build_duration: 120
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     environment:
       node: v22.13.1
       java: 17
