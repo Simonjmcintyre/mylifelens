@@ -46,6 +46,7 @@ function RootLayoutNav() {
       <Stack.Screen name="project" />
       <Stack.Screen name="capture" />
       <Stack.Screen name="timeline" />
+      <Stack.Screen name="privacy-policy" />
     </Stack>
   );
 }
