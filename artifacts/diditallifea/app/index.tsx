@@ -170,6 +170,11 @@ export default function HomeScreen() {
           </Text>
         </View>
 
+        <Pressable testID="new-project-floating" onPress={() => setShowNew(true)} style={({ pressed }) => [styles.newProjectTab, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
+          <AppIcon name="plus" size={18} color={colors.primaryForeground} />
+          <Text style={[styles.newProjectTabText, { color: colors.primaryForeground }]}>New project</Text>
+        </Pressable>
+
         <View style={[styles.insight, { backgroundColor: colors.insightBackground }]}>
           <View style={styles.insightCopy}>
             <View style={styles.insightLabel}><AppIcon name="sun" size={14} color={colors.primary} /><Text style={[styles.insightEyebrow, { color: colors.primary }]}>NEXT CHECK-IN</Text></View>
@@ -180,7 +185,6 @@ export default function HomeScreen() {
               {nextReminder ? 'A gentle nudge to capture the next chapter.' : 'Start a project to begin your visual timeline.'}
             </Text>
           </View>
-          <View style={[styles.insightOrb, { backgroundColor: colors.primary }]}><AppIcon name="arrow-down-right" size={20} color={colors.insightBackground} /></View>
         </View>
 
         <View style={styles.sectionHeader}>
@@ -194,11 +198,6 @@ export default function HomeScreen() {
 
         {completedProjects.length > 0 && <><View style={[styles.sectionHeader, { marginTop: 28 }]}><View><Text style={[styles.sectionTitle, { color: colors.foreground }]}>Finished stories</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>The view from here</Text></View></View>{completedProjects.map((project) => <ProjectCard key={project.id} project={project} onReminder={() => undefined} />)}</>}
       </ScrollView>
-
-      <Pressable testID="new-project-floating" onPress={() => setShowNew(true)} style={({ pressed }) => [styles.fab, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
-        <AppIcon name="plus" size={24} color={colors.primaryForeground} />
-        <Text style={[styles.fabText, { color: colors.primaryForeground }]}>New project</Text>
-      </Pressable>
 
       <Modal visible={showNew} animationType="slide" transparent onRequestClose={() => setShowNew(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, styles.newProjectSheet, { backgroundColor: colors.card }]}>
@@ -238,13 +237,14 @@ const styles = StyleSheet.create({
   eyebrow: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1.8 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 39, lineHeight: 42, letterSpacing: -1.8, marginTop: 10 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 22, marginTop: 13, maxWidth: 305 },
-  insight: { borderRadius: 22, padding: 20, minHeight: 155, flexDirection: 'row', justifyContent: 'space-between', overflow: 'hidden' },
-  insightCopy: { flex: 1, paddingRight: 12 },
+  newProjectTab: { alignSelf: 'flex-end', height: 42, borderRadius: 16, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12 },
+  newProjectTabText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  insight: { borderRadius: 22, padding: 16, minHeight: 128, overflow: 'hidden' },
+  insightCopy: { flex: 1 },
   insightLabel: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   insightEyebrow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.2 },
-  insightTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 21, lineHeight: 25, marginTop: 16, maxWidth: 230 },
-  insightBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, marginTop: 8, maxWidth: 240 },
-  insightOrb: { width: 45, height: 45, borderRadius: 23, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-end' },
+  insightTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 21, lineHeight: 25, marginTop: 10, maxWidth: 300 },
+  insightBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18, marginTop: 5, maxWidth: 300 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 31, marginBottom: 14 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 21, letterSpacing: -0.5 },
   sectionHint: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 4 },
@@ -270,8 +270,6 @@ const styles = StyleSheet.create({
   empty: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 21, padding: 25, alignItems: 'center' },
   emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 12 },
   emptyBody: { fontFamily: 'Inter_400Regular', textAlign: 'center', fontSize: 13, lineHeight: 19, marginTop: 7, maxWidth: 250 },
-  fab: { position: 'absolute', right: 20, bottom: 22, borderRadius: 22, height: 52, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 8, elevation: 4 },
-  fabText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12 },
