@@ -1,6 +1,6 @@
 import { REMINDER_OPTIONS } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
+import { AppIcon } from '@/components/AppIcon';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -28,10 +28,10 @@ export function ReminderPicker({ selectedHours, onSelect, disabled = false, show
             style={[styles.option, { borderColor: colors.border, backgroundColor: isSelected ? colors.secondary : colors.background }, disabled && styles.disabled]}
           >
             <View style={[styles.optionIcon, { backgroundColor: option.hours === null ? colors.muted : colors.accent }]}>
-              <Feather name={option.hours === null ? 'bell-off' : 'bell'} size={17} color={option.hours === null ? colors.mutedForeground : colors.accentForeground} />
+              <AppIcon name={option.hours === null ? 'bell-off' : 'bell'} size={17} color={option.hours === null ? colors.mutedForeground : colors.accentForeground} />
             </View>
             <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
-            {isSelected && <Feather name="check" size={18} color={colors.secondaryForeground} />}
+            {isSelected && <AppIcon name="check" size={18} color={colors.secondaryForeground} />}
           </Pressable>
         );
       })}

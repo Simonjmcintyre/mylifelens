@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
+import { AppIcon } from '@/components/AppIcon';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
@@ -69,7 +69,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
             ) : (
-              <Feather name="home" size={22} color={color} />
+              <AppIcon name="home" size={22} color={color} />
             ),
         }}
       />

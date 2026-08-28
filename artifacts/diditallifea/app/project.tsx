@@ -3,7 +3,7 @@ import { PhotoImage } from '@/components/PhotoImage';
 import { ReminderPicker } from '@/components/ReminderPicker';
 import { formatReminderShort, getReminderHours, Project, useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
+import { AppIcon as Feather } from '@/components/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';

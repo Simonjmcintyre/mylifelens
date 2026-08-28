@@ -1,7 +1,7 @@
 import { PhotoImage } from '@/components/PhotoImage';
 import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
+import { AppIcon as Feather } from '@/components/AppIcon';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';

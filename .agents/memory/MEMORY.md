@@ -1,0 +1,1 @@
+- [Native icon rendering](native-icon-rendering.md) — use SVG-drawn icons in MyLifelens; font glyph icons rendered as missing-character boxes on a physical phone.

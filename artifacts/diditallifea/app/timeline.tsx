@@ -1,7 +1,7 @@
 import { PhotoImage } from '@/components/PhotoImage';
 import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
-import { Feather } from '@expo/vector-icons';
+import { AppIcon as Feather } from '@/components/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
