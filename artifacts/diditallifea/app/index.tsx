@@ -1,15 +1,14 @@
 import { BrandMark } from '@/components/BrandMark';
 import { PhotoImage } from '@/components/PhotoImage';
+import { ReminderPicker } from '@/components/ReminderPicker';
 import {
   formatReminderShort,
   getReminderHours,
   Project,
-  REMINDER_OPTIONS,
   useProjects,
 } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -70,7 +69,7 @@ function ProjectCard({ project, onReminder }: { project: Project; onReminder: ()
             </Text>
           </View>
           {!project.completed && (
-            <Pressable testID={`reminder-${project.id}`} onPress={onReminder} hitSlop={10} style={styles.reminderButton}>
+            <Pressable testID={`reminder-${project.id}`} onPress={(event) => { event.stopPropagation(); onReminder(); }} hitSlop={10} style={styles.reminderButton}>
               <Feather name="bell" size={14} color={project.reminderEnabled ? colors.primary : colors.mutedForeground} />
               <Text style={[styles.reminderText, { color: project.reminderEnabled ? colors.primary : colors.mutedForeground }]}>
                 {project.reminderEnabled ? formatReminderShort(getReminderHours(project)) : 'Remind me'}
@@ -92,6 +91,7 @@ export default function HomeScreen() {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [location, setLocation] = useState('');
+  const [newReminderHours, setNewReminderHours] = useState<number | null>(null);
   const [isSavingReminder, setIsSavingReminder] = useState(false);
 
   const activeProjects = projects.filter((project) => !project.completed);
@@ -109,10 +109,19 @@ export default function HomeScreen() {
       Alert.alert('Add a little more', 'Give your project a name and say what you are tracking.');
       return;
     }
-    const project = await addProject(name.trim(), subject.trim(), location.trim() || 'Personal');
+    const { project, reminderResult } = await addProject(
+      name.trim(),
+      subject.trim(),
+      location.trim() || 'Personal',
+      newReminderHours ?? undefined,
+    );
+    if (reminderResult && !reminderResult.success) {
+      Alert.alert('Project created without a reminder', reminderResult.reason);
+    }
     setName('');
     setSubject('');
     setLocation('');
+    setNewReminderHours(null);
     setShowNew(false);
     router.push({ pathname: '/project', params: { id: project.id } });
   };
@@ -161,23 +170,18 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <LinearGradient
-          colors={[colors.foreground, '#2C4E46']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.insight}
-        >
+        <View style={[styles.insight, { backgroundColor: colors.insightBackground }]}>
           <View style={styles.insightCopy}>
             <View style={styles.insightLabel}><Feather name="sun" size={14} color={colors.primary} /><Text style={[styles.insightEyebrow, { color: colors.primary }]}>NEXT CHECK-IN</Text></View>
-            <Text style={[styles.insightTitle, { color: colors.background }]}>
+            <Text style={[styles.insightTitle, { color: colors.insightForeground }]}>
               {nextReminder ? `${nextReminder.name} · ${formatDate(nextReminder.nextReminderAt ?? '')}` : 'Ready when you are'}
             </Text>
-            <Text style={[styles.insightBody, { color: '#C7D4CB' }]}>
+            <Text style={[styles.insightBody, { color: colors.insightMuted }]}>
               {nextReminder ? 'A gentle nudge to capture the next chapter.' : 'Start a project to begin your visual timeline.'}
             </Text>
           </View>
-          <View style={[styles.insightOrb, { backgroundColor: colors.primary }]}><Feather name="arrow-down-right" size={20} color={colors.foreground} /></View>
-        </LinearGradient>
+          <View style={[styles.insightOrb, { backgroundColor: colors.primary }]}><Feather name="arrow-down-right" size={20} color={colors.insightBackground} /></View>
+        </View>
 
         <View style={styles.sectionHeader}>
           <View><Text style={[styles.sectionTitle, { color: colors.foreground }]}>In progress</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>{activeProjects.length} {activeProjects.length === 1 ? 'story' : 'stories'} unfolding</Text></View>
@@ -197,13 +201,17 @@ export default function HomeScreen() {
       </Pressable>
 
       <Modal visible={showNew} animationType="slide" transparent onRequestClose={() => setShowNew(false)}>
-        <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20 }]}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}><View><Text style={[styles.sheetTitle, { color: colors.foreground }]}>Start a new story</Text><Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>Give your future self something to look back on.</Text></View><Pressable onPress={() => setShowNew(false)}><Feather name="x" size={23} color={colors.mutedForeground} /></Pressable></View>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Project name</Text><TextInput testID="project-name-input" value={name} onChangeText={setName} placeholder="e.g. Kitchen renovation" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>What are you tracking?</Text><TextInput testID="project-subject-input" value={subject} onChangeText={setSubject} placeholder="e.g. A build, a person, a garden" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Where? <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }}>(optional)</Text></Text><TextInput value={location} onChangeText={setLocation} placeholder="e.g. Home, studio, site" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
-          <Pressable testID="create-project-button" onPress={() => void createProject()} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.foreground }, pressed && styles.pressed]}><Text style={[styles.primaryButtonText, { color: colors.background }]}>Create project</Text><Feather name="arrow-right" size={18} color={colors.background} /></Pressable>
+        <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, styles.newProjectSheet, { backgroundColor: colors.card }]}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}><View><Text style={[styles.sheetTitle, { color: colors.foreground }]}>Start a new story</Text><Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>Give your future self something to look back on.</Text></View><Pressable onPress={() => setShowNew(false)}><Feather name="x" size={23} color={colors.mutedForeground} /></Pressable></View>
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Project name</Text><TextInput testID="project-name-input" value={name} onChangeText={setName} placeholder="e.g. Kitchen renovation" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>What are you tracking?</Text><TextInput testID="project-subject-input" value={subject} onChangeText={setSubject} placeholder="e.g. A build, a person, a garden" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+            <Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Where? <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }}>(optional)</Text></Text><TextInput value={location} onChangeText={setLocation} placeholder="e.g. Home, studio, site" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]} />
+            <View style={styles.reminderHeading}><View><Text style={[styles.inputLabel, { color: colors.mutedForeground }]}>Check-in reminders</Text><Text style={[styles.reminderHint, { color: colors.mutedForeground }]}>Choose a rhythm now, or leave it off.</Text></View><Feather name="bell" size={17} color={colors.primary} /></View>
+            <View style={styles.newReminderOptions}><ReminderPicker selectedHours={newReminderHours} onSelect={setNewReminderHours} showNone /></View>
+            <Pressable testID="create-project-button" onPress={() => void createProject()} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.foreground }, pressed && styles.pressed]}><Text style={[styles.primaryButtonText, { color: colors.background }]}>Create project</Text><Feather name="arrow-right" size={18} color={colors.background} /></Pressable>
+          </ScrollView>
         </View></View>
       </Modal>
 
@@ -211,7 +219,7 @@ export default function HomeScreen() {
         <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20 }]}>
           <View style={styles.sheetHandle} /><View style={styles.sheetHeader}><View><Text style={[styles.sheetTitle, { color: colors.foreground }]}>Keep the rhythm</Text><Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>How often should we remind you to check in?</Text></View><Pressable onPress={() => setShowReminder(null)}><Feather name="x" size={23} color={colors.mutedForeground} /></Pressable></View>
           <ScrollView style={styles.reminderOptions} showsVerticalScrollIndicator={false}>
-            {REMINDER_OPTIONS.map((option) => <Pressable key={option.hours} disabled={isSavingReminder} onPress={() => void chooseReminder(option.hours)} style={[styles.option, { borderColor: colors.border, backgroundColor: showReminder?.reminderEnabled && getReminderHours(showReminder) === option.hours ? colors.secondary : colors.background }, isSavingReminder && { opacity: 0.6 }]}><View style={[styles.optionIcon, { backgroundColor: colors.accent }]}><Feather name="bell" size={17} color={colors.accentForeground} /></View><Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>{showReminder?.reminderEnabled && getReminderHours(showReminder) === option.hours && <Feather name="check" size={18} color={colors.secondaryForeground} />}</Pressable>)}
+            <ReminderPicker selectedHours={showReminder?.reminderEnabled ? getReminderHours(showReminder) : null} onSelect={(hours) => { if (hours !== null) void chooseReminder(hours); }} disabled={isSavingReminder} />
           </ScrollView>
           {showReminder?.reminderEnabled && <Pressable disabled={isSavingReminder} onPress={() => void turnReminderOff()} style={[styles.disableReminder, isSavingReminder && { opacity: 0.6 }]}><Text style={[styles.disableReminderText, { color: colors.destructive }]}>Turn reminders off</Text></Pressable>}
         </View></View>
@@ -267,6 +275,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12 },
+  newProjectSheet: { maxHeight: '92%' },
   sheetHandle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 3, backgroundColor: '#C9C3B8', marginBottom: 20 },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 20, marginBottom: 20 },
   sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 24, letterSpacing: -0.8 },
@@ -275,10 +284,10 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 14, height: 50, paddingHorizontal: 14, fontFamily: 'Inter_400Regular', fontSize: 15, marginBottom: 5 },
   primaryButton: { height: 54, borderRadius: 17, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9, marginTop: 21 },
   primaryButtonText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
-  option: { height: 61, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
-  optionIcon: { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
-  optionText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, flex: 1 },
   reminderOptions: { maxHeight: 390 },
+  newReminderOptions: { maxHeight: 300 },
+  reminderHeading: { marginTop: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reminderHint: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
   disableReminder: { alignItems: 'center', paddingTop: 13 },
   disableReminderText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 });

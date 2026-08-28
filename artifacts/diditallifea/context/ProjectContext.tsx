@@ -30,13 +30,14 @@ export type Project = {
 type ProjectContextValue = {
   projects: Project[];
   isLoaded: boolean;
-  addProject: (name: string, subject: string, location: string) => Promise<Project>;
+  addProject: (name: string, subject: string, location: string, reminderHours?: number) => Promise<AddProjectResult>;
   addPhoto: (projectId: string, photo: Omit<ProgressPhoto, 'id'>) => Promise<void>;
   setReminder: (projectId: string, intervalHours: number, enabled: boolean) => Promise<ReminderResult>;
   completeProject: (projectId: string) => Promise<void>;
 };
 
 export type ReminderResult = { success: true } | { success: false; reason: string };
+type AddProjectResult = { project: Project; reminderResult?: ReminderResult };
 
 export const REMINDER_OPTIONS = [
   { hours: 6, label: 'Every 6 hours', shortLabel: '6h' },
@@ -111,6 +112,65 @@ async function cancelNotification(notificationId?: string) {
   }
 }
 
+type ScheduledReminder = {
+  scheduledNotificationId: string;
+  nextReminderAt: string;
+};
+
+async function scheduleReminderNotification(project: Project, intervalHours: number): Promise<ScheduledReminder | ReminderResult> {
+  if (Platform.OS === 'web') {
+    return { success: false, reason: 'Device reminders are available in the MyLifelens mobile app.' };
+  }
+
+  try {
+    let permission = await Notifications.getPermissionsAsync();
+    if (!permission.granted) {
+      permission = await Notifications.requestPermissionsAsync({
+        ios: { allowAlert: true, allowBadge: false, allowSound: true },
+      });
+    }
+    if (!permission.granted) {
+      return {
+        success: false,
+        reason: 'Please allow notifications in your device settings to turn on reminders.',
+      };
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Photo reminders',
+        importance: Notifications.AndroidImportance.DEFAULT,
+        sound: 'default',
+      });
+    }
+
+    const seconds = Math.max(60, intervalHours * 60 * 60);
+    const scheduledNotificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Time for your MyLifelens check-in',
+        body: `Capture the next frame of “${project.name}”.`,
+        sound: 'default',
+        data: { projectId: project.id },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds,
+        repeats: true,
+        ...(Platform.OS === 'android' ? { channelId: 'reminders' } : {}),
+      },
+    });
+    return {
+      scheduledNotificationId,
+      nextReminderAt: new Date(Date.now() + intervalHours * 60 * 60 * 1000).toISOString(),
+    };
+  } catch {
+    return {
+      success: false,
+      reason: 'We could not schedule that reminder. Please try again on your device.',
+    };
+  }
+}
+
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -147,7 +207,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     () => ({
       projects,
       isLoaded,
-      addProject: async (name, subject, location) => {
+      addProject: async (name, subject, location, reminderHours) => {
         const project: Project = {
           id: makeId(),
           name,
@@ -160,7 +220,19 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           photos: [],
         };
         await persist([project, ...projects]);
-        return project;
+        if (reminderHours === undefined) return { project };
+
+        const scheduled = await scheduleReminderNotification(project, reminderHours);
+        if ('success' in scheduled) return { project, reminderResult: scheduled };
+        const scheduledProject = {
+          ...project,
+          reminderIntervalHours: reminderHours,
+          reminderEnabled: true,
+          nextReminderAt: scheduled.nextReminderAt,
+          scheduledNotificationId: scheduled.scheduledNotificationId,
+        };
+        await persist([scheduledProject, ...projects]);
+        return { project: scheduledProject, reminderResult: { success: true } };
       },
       addPhoto: async (projectId, photo) => {
         const next = projects.map((project) =>
@@ -192,49 +264,10 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           return { success: true };
         }
 
-        if (Platform.OS === 'web') {
-          return { success: false, reason: 'Device reminders are available in the MyLifelens mobile app.' };
-        }
-
         try {
-          let permission = await Notifications.getPermissionsAsync();
-          if (!permission.granted) {
-            permission = await Notifications.requestPermissionsAsync({
-              ios: { allowAlert: true, allowBadge: false, allowSound: true },
-            });
-          }
-          if (!permission.granted) {
-            return {
-              success: false,
-              reason: 'Please allow notifications in your device settings to turn on reminders.',
-            };
-          }
-
-          if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('reminders', {
-              name: 'Photo reminders',
-              importance: Notifications.AndroidImportance.DEFAULT,
-              sound: 'default',
-            });
-          }
-
           await cancelNotification(project.scheduledNotificationId);
-          const seconds = Math.max(60, intervalHours * 60 * 60);
-          const scheduledNotificationId = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Time for your MyLifelens check-in',
-              body: `Capture the next frame of “${project.name}”.`,
-              sound: 'default',
-              data: { projectId },
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-              seconds,
-              repeats: true,
-              ...(Platform.OS === 'android' ? { channelId: 'reminders' } : {}),
-            },
-          });
-          const nextReminder = new Date(Date.now() + intervalHours * 60 * 60 * 1000);
+          const scheduled = await scheduleReminderNotification(project, intervalHours);
+          if ('success' in scheduled) return scheduled;
           await persist(
             projects.map((item) =>
               item.id === projectId
@@ -242,8 +275,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
                     ...item,
                     reminderIntervalHours: intervalHours,
                     reminderEnabled: true,
-                    nextReminderAt: nextReminder.toISOString(),
-                    scheduledNotificationId,
+                    nextReminderAt: scheduled.nextReminderAt,
+                    scheduledNotificationId: scheduled.scheduledNotificationId,
                   }
                 : item,
             ),
