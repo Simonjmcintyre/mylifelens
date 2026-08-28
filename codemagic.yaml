@@ -1,0 +1,33 @@
+workflows:
+  mylifelens-android:
+    name: MyLifelens Android
+    working_directory: artifacts/diditallifea
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      node: v22.13.1
+      java: 17
+      vars:
+        PACKAGE_NAME: com.mylifelens.app
+    scripts:
+      - name: Install pnpm
+        script: |
+          npm install -g pnpm@9
+      - name: Install workspace dependencies
+        script: |
+          cd "$CM_BUILD_DIR"
+          pnpm install --frozen-lockfile
+      - name: Generate Android project
+        script: |
+          pnpm exec expo prebuild --platform android --no-install
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/artifacts/diditallifea/android/local.properties"
+      - name: Build Android App Bundle
+        script: |
+          cd android
+          ./gradlew bundleRelease \
+            -PversionCode="${BUILD_NUMBER:-1}" \
+            -PversionName="1.0.${BUILD_NUMBER:-1}"
+    artifacts:
+      - android/app/build/outputs/**/*.aab
