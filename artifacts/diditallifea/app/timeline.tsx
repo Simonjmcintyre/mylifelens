@@ -85,24 +85,20 @@ export default function TimelineScreen() {
     }
   };
 
-  const downloadMorph = async () => {
+  const shareMorph = async () => {
     const frame = photos[morphFrame] ?? photos[0];
     if (!frame) {
-      showMessage('Add a frame first', 'Capture at least one progress photo before downloading a preview.');
-      return;
-    }
-    if (frame.isSample) {
-      showMessage('Add a real frame first', 'The sample preview is for exploring MyLifelens. Add your own photo to download it.');
+      showMessage('Add a frame first', 'Capture at least one progress photo before sharing a preview.');
       return;
     }
     try {
       await Share.share({
         title: `${project.name} morph preview`,
-        message: `${project.name} — morph preview frame ${morphFrame + 1} of ${photos.length}.`,
-        url: frame.uri,
+        message: `${project.name} — morph preview frame ${morphFrame + 1} of ${photos.length}.\n\nShared from MyLifelens.`,
+        ...(frame.isSample ? {} : { url: frame.uri }),
       });
     } catch {
-      showMessage('Download unavailable', 'We could not open the system save sheet right now.');
+      showMessage('Sharing unavailable', 'We could not open the system share sheet right now.');
     }
   };
 
@@ -165,7 +161,7 @@ export default function TimelineScreen() {
             </View>
             <View style={styles.speedTicks}>{speedOptions.map((option) => <Pressable key={option} onPress={() => setMorphSpeed(option)}><Text style={[styles.speedTick, { color: option === morphSpeed ? colors.primary : '#C7D4CB' }]}>{option}×</Text></Pressable>)}</View>
           </View>
-          <Pressable testID="download-morph-button" onPress={() => void downloadMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed]}><Feather name="download" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>Download preview</Text></Pressable>
+          <Pressable testID="share-morph-button" onPress={() => void shareMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed]}><Feather name="share-2" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>Share preview</Text></Pressable>
           <View style={styles.progressRow}>{photos.map((photo, index) => <View key={photo.id} style={[styles.progressSegment, { backgroundColor: index <= morphFrame ? colors.primary : '#53635D' }]} />)}</View>
         </View>
 
