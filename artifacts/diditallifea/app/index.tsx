@@ -1,5 +1,6 @@
 import { BrandMark } from '@/components/BrandMark';
 import { PhotoImage } from '@/components/PhotoImage';
+import { PaywallModal } from '@/components/PaywallModal';
 import { ReminderPicker } from '@/components/ReminderPicker';
 import {
   formatReminderShort,
@@ -9,6 +10,7 @@ import {
 } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { AppIcon } from '@/components/AppIcon';
+import { FREE_PROJECT_LIMIT, useSubscription } from '@/lib/revenuecat';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -86,7 +88,9 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { projects, isLoaded, addProject, setReminder } = useProjects();
+  const { isSubscribed } = useSubscription();
   const [showNew, setShowNew] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [showReminder, setShowReminder] = useState<Project | null>(null);
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
@@ -96,6 +100,7 @@ export default function HomeScreen() {
 
   const activeProjects = projects.filter((project) => !project.completed);
   const completedProjects = projects.filter((project) => project.completed);
+  const realProjectCount = projects.filter((project) => !project.id.startsWith('sample-')).length;
   const nextReminder = useMemo(
     () =>
       activeProjects
@@ -124,6 +129,14 @@ export default function HomeScreen() {
     setNewReminderHours(null);
     setShowNew(false);
     router.push({ pathname: '/project', params: { id: project.id } });
+  };
+
+  const openNewProject = () => {
+    if (!isSubscribed && realProjectCount >= FREE_PROJECT_LIMIT) {
+      setShowPaywall(true);
+      return;
+    }
+    setShowNew(true);
   };
 
   const chooseReminder = async (intervalHours: number) => {
@@ -157,9 +170,20 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <BrandMark />
-          <Pressable testID="new-project-top" onPress={() => setShowNew(true)} style={[styles.iconButton, { backgroundColor: colors.card }]}>
-            <AppIcon name="plus" size={21} color={colors.foreground} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              testID="open-pro"
+              onPress={() => setShowPaywall(true)}
+              style={[styles.proBadge, { backgroundColor: isSubscribed ? colors.primary : colors.card }]}
+            >
+              <Text style={[styles.proBadgeText, { color: colors.foreground }]}>
+                {isSubscribed ? 'PRO' : 'GO PRO'}
+              </Text>
+            </Pressable>
+            <Pressable testID="new-project-top" onPress={openNewProject} style={[styles.iconButton, { backgroundColor: colors.card }]}>
+              <AppIcon name="plus" size={21} color={colors.foreground} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.intro}>
@@ -170,7 +194,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <Pressable testID="new-project-floating" onPress={() => setShowNew(true)} style={({ pressed }) => [styles.newProjectTab, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
+        <Pressable testID="new-project-floating" onPress={openNewProject} style={({ pressed }) => [styles.newProjectTab, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
           <AppIcon name="plus" size={18} color={colors.primaryForeground} />
           <Text style={[styles.newProjectTabText, { color: colors.primaryForeground }]}>New project</Text>
         </Pressable>
@@ -223,6 +247,7 @@ export default function HomeScreen() {
           {showReminder?.reminderEnabled && <Pressable disabled={isSavingReminder} onPress={() => void turnReminderOff()} style={[styles.disableReminder, isSavingReminder && { opacity: 0.6 }]}><Text style={[styles.disableReminderText, { color: colors.destructive }]}>Turn reminders off</Text></Pressable>}
         </View></View>
       </Modal>
+      <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </View>
   );
 }
@@ -232,6 +257,9 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { paddingTop: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  proBadge: { height: 38, borderRadius: 14, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
+  proBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.7 },
   iconButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   intro: { paddingTop: 42, paddingBottom: 26 },
   eyebrow: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1.8 },

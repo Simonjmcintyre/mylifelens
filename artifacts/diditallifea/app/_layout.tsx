@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ProjectProvider } from '@/context/ProjectContext';
+import { initializeRevenueCat, SubscriptionProvider } from '@/lib/revenuecat';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -15,6 +16,7 @@ import {
 import { Stack } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
+import { Alert } from 'react-native';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -28,6 +30,14 @@ Notifications.setNotificationHandler({
 });
 
 const queryClient = new QueryClient();
+let revenueCatInitializationError: string | null = null;
+
+try {
+  initializeRevenueCat();
+} catch (error) {
+  revenueCatInitializationError =
+    error instanceof Error ? error.message : 'Subscriptions could not be started.';
+}
 
 function RootLayoutNav() {
   return (
@@ -54,19 +64,27 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    if (revenueCatInitializationError) {
+      Alert.alert('Subscriptions unavailable', revenueCatInitializationError);
+    }
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <ProjectProvider>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </ProjectProvider>
+          <SubscriptionProvider>
+            <ProjectProvider>
+              <GestureHandlerRootView>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </ProjectProvider>
+          </SubscriptionProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

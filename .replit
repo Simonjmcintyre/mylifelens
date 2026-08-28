@@ -21,3 +21,14 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY = "goog_IbBibFkbQWSIjGERbiLajNYlJzH"
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY = "appl_AnPmCTpoprulLCuDXWRBgirkooi"
+EXPO_PUBLIC_REVENUECAT_TEST_API_KEY = "test_jsemvPzonubPinqgVBdQamDYWyk"
+REVENUECAT_APPLE_APP_STORE_APP_ID = "app641bebd60b"
+REVENUECAT_GOOGLE_PLAY_STORE_APP_ID = "appdfcfda57b4"
+REVENUECAT_PROJECT_ID = "proj3cff98e8"
+REVENUECAT_TEST_STORE_APP_ID = "appa413f13db1"

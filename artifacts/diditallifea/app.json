@@ -14,9 +14,12 @@
       "backgroundColor": "#F5F1E8"
     },
     "ios": {
+      "bundleIdentifier": "com.mylifelens.app",
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.mylifelens.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
