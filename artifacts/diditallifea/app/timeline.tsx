@@ -4,11 +4,19 @@ import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, Easing, GestureResponderEvent, PanResponder, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const dateLabel = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date));
+
+const showMessage = (title: string, message: string) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+};
 
 export default function TimelineScreen() {
   const colors = useColors();
@@ -19,15 +27,33 @@ export default function TimelineScreen() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
+  const [morphSpeed, setMorphSpeed] = useState(1);
+  const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
   const photos = project?.photos ?? [];
+  const speedOptions = [0.5, 1, 1.5, 2];
+  const speedPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (event: GestureResponderEvent) => updateSpeedFromX(event.nativeEvent.locationX),
+      onPanResponderMove: (event: GestureResponderEvent) => updateSpeedFromX(event.nativeEvent.locationX),
+    }),
+  ).current;
+
+  function updateSpeedFromX(locationX: number) {
+    if (!speedTrackWidth.current) return;
+    const progress = Math.max(0, Math.min(1, locationX / speedTrackWidth.current));
+    const optionIndex = Math.round(progress * (speedOptions.length - 1));
+    setMorphSpeed(speedOptions[optionIndex]);
+  }
 
   useEffect(() => {
     if (!isPlaying || photos.length < 2 || morphFrame >= photos.length - 1) return;
     morphBlend.setValue(0);
     const animation = Animated.timing(morphBlend, {
       toValue: 1,
-      duration: 1800,
+      duration: 1800 / morphSpeed,
       easing: Easing.inOut(Easing.ease),
       useNativeDriver: true,
     });
@@ -42,7 +68,7 @@ export default function TimelineScreen() {
       }
     });
     return () => animation.stop();
-  }, [isPlaying, morphBlend, morphFrame, photos.length]);
+  }, [isPlaying, morphBlend, morphFrame, morphSpeed, photos.length]);
 
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
@@ -56,6 +82,27 @@ export default function TimelineScreen() {
       });
     } catch {
       Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
+    }
+  };
+
+  const downloadMorph = async () => {
+    const frame = photos[morphFrame] ?? photos[0];
+    if (!frame) {
+      showMessage('Add a frame first', 'Capture at least one progress photo before downloading a preview.');
+      return;
+    }
+    if (frame.isSample) {
+      showMessage('Add a real frame first', 'The sample preview is for exploring MyLifelens. Add your own photo to download it.');
+      return;
+    }
+    try {
+      await Share.share({
+        title: `${project.name} morph preview`,
+        message: `${project.name} — morph preview frame ${morphFrame + 1} of ${photos.length}.`,
+        url: frame.uri,
+      });
+    } catch {
+      showMessage('Download unavailable', 'We could not open the system save sheet right now.');
     }
   };
 
@@ -105,6 +152,20 @@ export default function TimelineScreen() {
             <View style={styles.morphCopy}><Text style={[styles.morphTitle, { color: colors.background }]}>Watch the change</Text><Text style={[styles.morphMeta, { color: '#C7D4CB' }]}>{photos.length > 0 ? `Frame ${morphFrame + 1} of ${photos.length}` : 'No frames yet'}</Text></View>
             <View style={styles.morphButtons}><Pressable testID="restart-morph-button" onPress={resetMorph} style={[styles.morphIconButton, { borderColor: '#53635D' }]}><Feather name="rotate-ccw" size={16} color={colors.background} /></Pressable><Pressable testID="play-morph-button" onPress={toggleMorph} style={[styles.playButton, { backgroundColor: colors.primary }]}><Feather name={isPlaying ? 'pause' : 'play'} size={18} color={colors.primaryForeground} /></Pressable></View>
           </View>
+          <View style={styles.speedPanel}>
+            <View style={styles.speedHeader}><Text style={[styles.speedLabel, { color: colors.background }]}>Playback speed</Text><Text style={[styles.speedValue, { color: colors.primary }]}>{morphSpeed}×</Text></View>
+            <View
+              testID="morph-speed-slider"
+              onLayout={(event) => { speedTrackWidth.current = event.nativeEvent.layout.width; }}
+              {...speedPanResponder.panHandlers}
+              style={styles.speedTrack}
+            >
+              <View style={[styles.speedTrackFill, { backgroundColor: colors.primary, width: `${((morphSpeed - 0.5) / 1.5) * 100}%` }]} />
+              <View style={[styles.speedThumb, { backgroundColor: colors.primary, left: `${((morphSpeed - 0.5) / 1.5) * 100}%` }]} />
+            </View>
+            <View style={styles.speedTicks}>{speedOptions.map((option) => <Pressable key={option} onPress={() => setMorphSpeed(option)}><Text style={[styles.speedTick, { color: option === morphSpeed ? colors.primary : '#C7D4CB' }]}>{option}×</Text></Pressable>)}</View>
+          </View>
+          <Pressable testID="download-morph-button" onPress={() => void downloadMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed]}><Feather name="download" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>Download preview</Text></Pressable>
           <View style={styles.progressRow}>{photos.map((photo, index) => <View key={photo.id} style={[styles.progressSegment, { backgroundColor: index <= morphFrame ? colors.primary : '#53635D' }]} />)}</View>
         </View>
 
@@ -147,6 +208,17 @@ const styles = StyleSheet.create({
   morphButtons: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   morphIconButton: { width: 35, height: 35, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   playButton: { width: 39, height: 39, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  speedPanel: { paddingHorizontal: 3, paddingTop: 4, paddingBottom: 8 },
+  speedHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 },
+  speedLabel: { fontFamily: 'Inter_500Medium', fontSize: 12 },
+  speedValue: { fontFamily: 'Inter_700Bold', fontSize: 12 },
+  speedTrack: { height: 18, justifyContent: 'center', position: 'relative', backgroundColor: '#53635D', borderRadius: 2 },
+  speedTrackFill: { position: 'absolute', left: 0, height: 4, borderRadius: 2 },
+  speedThumb: { position: 'absolute', width: 14, height: 14, borderRadius: 7, marginLeft: -7 },
+  speedTicks: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
+  speedTick: { fontFamily: 'Inter_500Medium', fontSize: 10 },
+  downloadButton: { height: 39, borderWidth: 1, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginHorizontal: 3, marginBottom: 10 },
+  downloadText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   progressRow: { flexDirection: 'row', gap: 4, paddingHorizontal: 3, paddingBottom: 2 },
   progressSegment: { height: 3, borderRadius: 2, flex: 1 },
   comparison: { marginHorizontal: 20, height: 190, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

@@ -17,6 +17,7 @@ export type AppIconName =
   | 'chevron-left'
   | 'chevron-right'
   | 'chevron-up'
+  | 'download'
   | 'edit-3'
   | 'film'
   | 'flag'
@@ -75,6 +76,8 @@ function IconDrawing({ name }: { name: AppIconName }) {
       return <Polyline points="18 15 12 9 6 15" />;
     case 'edit-3':
       return <><Path d="M12 20h9" /><Path d="M16.5 3.5a2.12 2.12 0 013 3L8 18l-4 1 1-4z" /></>;
+    case 'download':
+      return <><Path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><Polyline points="7 10 12 15 17 10" /><Line x1="12" y1="15" x2="12" y2="3" /></>;
     case 'film':
       return <><Rect x="2" y="2" width="20" height="20" rx="2" /><Line x1="7" y1="2" x2="7" y2="22" /><Line x1="17" y1="2" x2="17" y2="22" /><Line x1="2" y1="12" x2="22" y2="12" /><Line x1="2" y1="7" x2="7" y2="7" /><Line x1="2" y1="17" x2="7" y2="17" /><Line x1="17" y1="17" x2="22" y2="17" /><Line x1="17" y1="7" x2="22" y2="7" /></>;
     case 'flag':
