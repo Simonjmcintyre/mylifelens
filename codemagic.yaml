@@ -13,10 +13,10 @@ workflows:
       - name: Install workspace dependencies
         script: |
           cd "$CM_BUILD_DIR"
-          npx --yes pnpm@9.15.4 install --frozen-lockfile
+          npx --yes pnpm@10.26.1 install --frozen-lockfile
       - name: Generate Android project
         script: |
-          npx --yes pnpm@9.15.4 exec expo prebuild --platform android --no-install
+          npx --yes pnpm@10.26.1 exec expo prebuild --platform android --no-install
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/artifacts/diditallifea/android/local.properties"
