@@ -1,2 +1,3 @@
 - [Native icon rendering](native-icon-rendering.md) — use SVG-drawn icons in MyLifelens; font glyph icons rendered as missing-character boxes on a physical phone.
 - [Replit GitHub remotes](replit-github-push.md) — the Git pane’s Create Remote opens new-repository setup; existing repos need the remote URL, then Push from the Git pane.
+- [Codemagic YAML scripts](codemagic-yaml-scripts.md) — avoid indentation-sensitive multiline literals inside YAML script blocks; escaped newlines are safer.
