@@ -11,7 +11,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         <Feather name="aperture" size={compact ? 16 : 19} color={colors.primaryForeground} />
       </View>
       {!compact && (
-        <Text style={[styles.wordmark, { color: colors.foreground }]}>Digital Life</Text>
+        <Text style={[styles.wordmark, { color: colors.foreground }]}>MyLifelens</Text>
       )}
     </View>
   );

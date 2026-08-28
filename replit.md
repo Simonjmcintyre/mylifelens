@@ -1,6 +1,6 @@
-# Digital Life
+# MyLifelens
 
-Digital Life is a mobile visual progress journal for tracking people and projects over time with aligned photos, check-in reminders, and finished timelines.
+MyLifelens is a mobile visual progress journal for tracking people and projects over time with aligned photos, check-in reminders, social sharing, and finished timelines.
 
 ## Run & Operate
 
@@ -40,7 +40,8 @@ Digital Life is a mobile visual progress journal for tracking people and project
 - Create named projects with a subject and location.
 - Capture a photo with the device camera or upload from the photo library.
 - Align the new frame against the previous frame using a translucent ghost overlay.
-- Set weekly, fortnightly, or monthly check-in reminders.
+- Set recurring check-in reminders from every 6 hours through monthly.
+- Share a latest frame and story summary through the device's social sharing sheet.
 - Review all frames as a start-to-finish journey and mark projects finished.
 
 ## User preferences

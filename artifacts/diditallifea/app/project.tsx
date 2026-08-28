@@ -1,11 +1,11 @@
 import { BrandMark } from '@/components/BrandMark';
 import { PhotoImage } from '@/components/PhotoImage';
-import { Project, useProjects } from '@/context/ProjectContext';
+import { formatReminderShort, getReminderHours, Project, useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const formatDate = (date: string) =>
@@ -31,13 +31,25 @@ export default function ProjectScreen() {
 
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
 
+  const shareProject = async () => {
+    try {
+      const latest = project.photos[project.photos.length - 1];
+      await Share.share({
+        message: `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nTracking progress with MyLifelens.`,
+        ...(latest?.isSample ? {} : latest ? { url: latest.uri } : {}),
+      });
+    } catch {
+      Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
+    }
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }}>
-        <View style={styles.topBar}><Pressable testID="back-button" onPress={() => router.back()} style={styles.backButton}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><BrandMark compact /><View style={{ width: 42 }} /></View>
+        <View style={styles.topBar}><Pressable testID="back-button" onPress={() => router.back()} style={styles.backButton}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><BrandMark compact /><Pressable testID="share-project-button" onPress={() => void shareProject()} style={styles.shareButton}><Feather name="share-2" size={19} color={colors.foreground} /></Pressable></View>
         <View style={styles.hero}><View style={styles.heroLabel}><View style={[styles.dot, { backgroundColor: project.completed ? colors.secondaryForeground : colors.primary }]} /><Text style={[styles.status, { color: colors.mutedForeground }]}>{project.completed ? 'FINISHED STORY' : 'IN PROGRESS'}</Text></View><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.meta, { color: colors.mutedForeground }]}>{project.subject} · {project.location}</Text></View>
         <View style={styles.actions}><Pressable testID="capture-button" onPress={() => router.push({ pathname: '/capture', params: { projectId: project.id } })} style={({ pressed }) => [styles.captureAction, { backgroundColor: colors.primary }, pressed && styles.pressed]}><Feather name="camera" size={20} color={colors.primaryForeground} /><Text style={[styles.captureText, { color: colors.primaryForeground }]}>Add progress photo</Text></Pressable><Pressable testID="timeline-button" onPress={() => router.push({ pathname: '/timeline', params: { id: project.id } })} style={[styles.timelineAction, { borderColor: colors.border }]}><Feather name="film" size={19} color={colors.foreground} /><Text style={[styles.timelineText, { color: colors.foreground }]}>View timeline</Text></Pressable></View>
-        <View style={styles.stats}><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.photos.length}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>frames captured</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 86400000))}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>days in motion</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.reminderEnabled ? `${project.reminderInterval}d` : '—'}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>check-in rhythm</Text></View></View>
+        <View style={styles.stats}><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.photos.length}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>frames captured</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 86400000))}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>days in motion</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.reminderEnabled ? formatReminderShort(getReminderHours(project)) : '—'}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>check-in rhythm</Text></View></View>
         <View style={styles.sectionHeading}><Text style={[styles.sectionTitle, { color: colors.foreground }]}>The journey so far</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Newest frame on top</Text></View>
         {project.photos.length ? [...project.photos].reverse().map((_, reversedIndex) => <PhotoTile key={project.photos[project.photos.length - 1 - reversedIndex].id} project={project} index={project.photos.length - 1 - reversedIndex} />) : <View style={[styles.empty, { borderColor: colors.border }]}><Feather name="image" size={25} color={colors.mutedForeground} /><Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your first frame is waiting</Text><Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Use the camera button to set the starting point.</Text></View>}
         {!project.completed && project.photos.length >= 2 && <Pressable testID="finish-project-button" onPress={() => router.push({ pathname: '/timeline', params: { id: project.id, finishing: 'true' } })} style={styles.finishButton}><Feather name="flag" size={17} color={colors.mutedForeground} /><Text style={[styles.finishText, { color: colors.mutedForeground }]}>This project is finished</Text></Pressable>}
@@ -51,6 +63,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { height: 64, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   backButton: { width: 42, height: 42, justifyContent: 'center' },
+  shareButton: { width: 42, height: 42, alignItems: 'flex-end', justifyContent: 'center' },
   hero: { paddingHorizontal: 20, paddingTop: 22 },
   heroLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 7, height: 7, borderRadius: 4 },

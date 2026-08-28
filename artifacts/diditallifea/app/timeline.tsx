@@ -48,6 +48,17 @@ export default function TimelineScreen() {
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
 
+  const shareStory = async () => {
+    try {
+      await Share.share({
+        message: `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`,
+        ...(last?.isSample ? {} : last ? { url: last.uri } : {}),
+      });
+    } catch {
+      Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
+    }
+  };
+
   const toggleMorph = () => {
     if (photos.length < 2) {
       Alert.alert('Add another frame first', 'The morph needs at least two progress photos to show a change over time.');
@@ -81,7 +92,7 @@ export default function TimelineScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }}>
-        <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Timeline</Text><Pressable testID="share-timeline-button" onPress={() => void Share.share({ message: `${project.name} — ${project.photos.length} frames from start to finish.` })} style={styles.shareButton}><Feather name="share-2" size={19} color={colors.foreground} /></Pressable></View>
+        <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Timeline</Text><Pressable testID="share-timeline-button" onPress={() => void shareStory()} style={styles.shareButton}><Feather name="share-2" size={19} color={colors.foreground} /></Pressable></View>
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
 
         <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>

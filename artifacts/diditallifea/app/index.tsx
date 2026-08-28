@@ -1,6 +1,12 @@
 import { BrandMark } from '@/components/BrandMark';
 import { PhotoImage } from '@/components/PhotoImage';
-import { Project, useProjects } from '@/context/ProjectContext';
+import {
+  formatReminderShort,
+  getReminderHours,
+  Project,
+  REMINDER_OPTIONS,
+  useProjects,
+} from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,7 +73,7 @@ function ProjectCard({ project, onReminder }: { project: Project; onReminder: ()
             <Pressable testID={`reminder-${project.id}`} onPress={onReminder} hitSlop={10} style={styles.reminderButton}>
               <Feather name="bell" size={14} color={project.reminderEnabled ? colors.primary : colors.mutedForeground} />
               <Text style={[styles.reminderText, { color: project.reminderEnabled ? colors.primary : colors.mutedForeground }]}>
-                {project.reminderEnabled ? `${project.reminderInterval}d` : 'Remind me'}
+                {project.reminderEnabled ? formatReminderShort(getReminderHours(project)) : 'Remind me'}
               </Text>
             </Pressable>
           )}
@@ -86,6 +92,7 @@ export default function HomeScreen() {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [location, setLocation] = useState('');
+  const [isSavingReminder, setIsSavingReminder] = useState(false);
 
   const activeProjects = projects.filter((project) => !project.completed);
   const completedProjects = projects.filter((project) => project.completed);
@@ -108,6 +115,30 @@ export default function HomeScreen() {
     setLocation('');
     setShowNew(false);
     router.push({ pathname: '/project', params: { id: project.id } });
+  };
+
+  const chooseReminder = async (intervalHours: number) => {
+    if (!showReminder) return;
+    setIsSavingReminder(true);
+    const result = await setReminder(showReminder.id, intervalHours, true);
+    setIsSavingReminder(false);
+    if (!result.success) {
+      Alert.alert('Reminders need permission', result.reason);
+      return;
+    }
+    setShowReminder(null);
+  };
+
+  const turnReminderOff = async () => {
+    if (!showReminder) return;
+    setIsSavingReminder(true);
+    const result = await setReminder(showReminder.id, getReminderHours(showReminder), false);
+    setIsSavingReminder(false);
+    if (!result.success) {
+      Alert.alert('Could not turn reminders off', result.reason);
+      return;
+    }
+    setShowReminder(null);
   };
 
   if (!isLoaded) return <View style={[styles.loading, { backgroundColor: colors.background }]}><Text style={{ color: colors.mutedForeground }}>Loading your projects…</Text></View>;
@@ -179,8 +210,10 @@ export default function HomeScreen() {
       <Modal visible={!!showReminder} animationType="slide" transparent onRequestClose={() => setShowReminder(null)}>
         <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20 }]}>
           <View style={styles.sheetHandle} /><View style={styles.sheetHeader}><View><Text style={[styles.sheetTitle, { color: colors.foreground }]}>Keep the rhythm</Text><Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>How often should we remind you to check in?</Text></View><Pressable onPress={() => setShowReminder(null)}><Feather name="x" size={23} color={colors.mutedForeground} /></Pressable></View>
-          {[7, 14, 30].map((days) => <Pressable key={days} onPress={() => { if (showReminder) void setReminder(showReminder.id, days, true); setShowReminder(null); }} style={[styles.option, { borderColor: colors.border, backgroundColor: showReminder?.reminderEnabled && showReminder.reminderInterval === days ? colors.secondary : colors.background }]}><View style={[styles.optionIcon, { backgroundColor: colors.accent }]}><Feather name="bell" size={17} color={colors.accentForeground} /></View><Text style={[styles.optionText, { color: colors.foreground }]}>{days === 7 ? 'Every week' : days === 14 ? 'Every two weeks' : 'Every month'}</Text>{showReminder?.reminderEnabled && showReminder.reminderInterval === days && <Feather name="check" size={18} color={colors.secondaryForeground} />}</Pressable>)}
-          {showReminder?.reminderEnabled && <Pressable onPress={() => { if (showReminder) void setReminder(showReminder.id, showReminder.reminderInterval, false); setShowReminder(null); }} style={styles.disableReminder}><Text style={[styles.disableReminderText, { color: colors.destructive }]}>Turn reminders off</Text></Pressable>}
+          <ScrollView style={styles.reminderOptions} showsVerticalScrollIndicator={false}>
+            {REMINDER_OPTIONS.map((option) => <Pressable key={option.hours} disabled={isSavingReminder} onPress={() => void chooseReminder(option.hours)} style={[styles.option, { borderColor: colors.border, backgroundColor: showReminder?.reminderEnabled && getReminderHours(showReminder) === option.hours ? colors.secondary : colors.background }, isSavingReminder && { opacity: 0.6 }]}><View style={[styles.optionIcon, { backgroundColor: colors.accent }]}><Feather name="bell" size={17} color={colors.accentForeground} /></View><Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>{showReminder?.reminderEnabled && getReminderHours(showReminder) === option.hours && <Feather name="check" size={18} color={colors.secondaryForeground} />}</Pressable>)}
+          </ScrollView>
+          {showReminder?.reminderEnabled && <Pressable disabled={isSavingReminder} onPress={() => void turnReminderOff()} style={[styles.disableReminder, isSavingReminder && { opacity: 0.6 }]}><Text style={[styles.disableReminderText, { color: colors.destructive }]}>Turn reminders off</Text></Pressable>}
         </View></View>
       </Modal>
     </View>
@@ -245,6 +278,7 @@ const styles = StyleSheet.create({
   option: { height: 61, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', marginBottom: 9 },
   optionIcon: { width: 35, height: 35, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   optionText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, flex: 1 },
+  reminderOptions: { maxHeight: 390 },
   disableReminder: { alignItems: 'center', paddingTop: 13 },
   disableReminderText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 });
