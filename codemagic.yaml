@@ -26,28 +26,8 @@ workflows:
 
           path = Path("android/app/build.gradle")
           text = path.read_text()
-          old_signing = """    signingConfigs {
-              debug {
-                  storeFile file('debug.keystore')
-                  storePassword 'android'
-                  keyAlias 'androiddebugkey'
-                  keyPassword 'android'
-              }
-          }"""
-          new_signing = """    signingConfigs {
-              debug {
-                  storeFile file('debug.keystore')
-                  storePassword 'android'
-                  keyAlias 'androiddebugkey'
-                  keyPassword 'android'
-              }
-              release {
-                  storeFile file(System.getenv('CM_KEYSTORE_PATH'))
-                  storePassword System.getenv('CM_KEYSTORE_PASSWORD')
-                  keyAlias System.getenv('CM_KEY_ALIAS')
-                  keyPassword System.getenv('CM_KEY_PASSWORD')
-              }
-          }"""
+          old_signing = "    signingConfigs {\n        debug {\n            storeFile file('debug.keystore')\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }\n    }"
+          new_signing = "    signingConfigs {\n        debug {\n            storeFile file('debug.keystore')\n            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }\n        release {\n            storeFile file(System.getenv('CM_KEYSTORE_PATH'))\n            storePassword System.getenv('CM_KEYSTORE_PASSWORD')\n            keyAlias System.getenv('CM_KEY_ALIAS')\n            keyPassword System.getenv('CM_KEY_PASSWORD')\n        }\n    }"
           if old_signing not in text:
               raise SystemExit("Could not find the generated Android signing configuration")
           text = text.replace(old_signing, new_signing, 1)
