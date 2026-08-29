@@ -16,8 +16,45 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR"
           npx --yes pnpm@10.26.1 install --frozen-lockfile
+      - name: Configure RevenueCat Android public key
+        script: |
+          python3 - <<'PY'
+          import os
+          import re
+          import shlex
+          from pathlib import Path
+
+          workspace = Path(os.environ["CM_BUILD_DIR"])
+          api_key = os.environ.get("EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY", "").strip()
+
+          if not api_key:
+              replit_config = workspace / ".replit"
+              config_text = replit_config.read_text()
+              match = re.search(
+                  r'^EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY\s*=\s*"([^"]+)"\s*$',
+                  config_text,
+                  re.MULTILINE,
+              )
+              if match:
+                  api_key = match.group(1).strip()
+
+          if not api_key:
+              raise SystemExit(
+                  "EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY is not configured"
+              )
+
+          env_file = workspace / ".codemagic-revenuecat.env"
+          env_file.write_text(
+              "export EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY="
+              + shlex.quote(api_key)
+              + "\n"
+          )
+          env_file.chmod(0o600)
+          print("RevenueCat Android public key configured")
+          PY
       - name: Generate Android project
         script: |
+          source "$CM_BUILD_DIR/.codemagic-revenuecat.env"
           VERSION_CODE=$(python3 -c 'import os; print(max(2, int(os.getenv("BUILD_NUMBER", "2"))))')
           python3 -c 'import json, sys; path = "app.json"; data = json.load(open(path)); version_code = int(sys.argv[1]); data["expo"]["android"]["versionCode"] = version_code; data["expo"]["version"] = f"1.0.{version_code}"; open(path, "w").write(json.dumps(data, indent=2) + "\n")' "$VERSION_CODE"
           echo "Generating Android build with version code $VERSION_CODE"
@@ -46,6 +83,7 @@ workflows:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/artifacts/diditallifea/android/local.properties"
       - name: Build Android App Bundle
         script: |
+          source "$CM_BUILD_DIR/.codemagic-revenuecat.env"
           cd android
           ./gradlew bundleRelease
     artifacts:
