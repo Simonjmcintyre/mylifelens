@@ -44,8 +44,10 @@ workflows:
       - name: Build Android App Bundle
         script: |
           cd android
+          BUILD_NUMBER="${BUILD_NUMBER:-1}"
+          VERSION_CODE=$((BUILD_NUMBER + 1))
           ./gradlew bundleRelease \
-            -PversionCode="${BUILD_NUMBER:-1}" \
-            -PversionName="1.0.${BUILD_NUMBER:-1}"
+            -PversionCode="$VERSION_CODE" \
+            -PversionName="1.0.$VERSION_CODE"
     artifacts:
       - android/app/build/outputs/**/*.aab
