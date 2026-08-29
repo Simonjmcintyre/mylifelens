@@ -18,6 +18,9 @@ workflows:
           npx --yes pnpm@10.26.1 install --frozen-lockfile
       - name: Generate Android project
         script: |
+          VERSION_CODE=$(python3 -c 'import os; print(max(2, int(os.getenv("BUILD_NUMBER", "2"))))')
+          python3 -c 'import json, sys; path = "app.json"; data = json.load(open(path)); version_code = int(sys.argv[1]); data["expo"]["android"]["versionCode"] = version_code; data["expo"]["version"] = f"1.0.{version_code}"; open(path, "w").write(json.dumps(data, indent=2) + "\n")' "$VERSION_CODE"
+          echo "Generating Android build with version code $VERSION_CODE"
           npx --yes pnpm@10.26.1 exec expo prebuild --platform android --no-install
       - name: Configure Android release signing
         script: |
@@ -44,10 +47,6 @@ workflows:
       - name: Build Android App Bundle
         script: |
           cd android
-          BUILD_NUMBER="${BUILD_NUMBER:-1}"
-          VERSION_CODE=$((BUILD_NUMBER + 1))
-          ./gradlew bundleRelease \
-            -PversionCode="$VERSION_CODE" \
-            -PversionName="1.0.$VERSION_CODE"
+          ./gradlew bundleRelease
     artifacts:
       - android/app/build/outputs/**/*.aab
