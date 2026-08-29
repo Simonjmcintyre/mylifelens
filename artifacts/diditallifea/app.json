@@ -18,7 +18,8 @@
       "supportsTablet": false
     },
     "android": {
-      "package": "com.mylifelens.app"
+      "package": "com.mylifelens.app",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/images/icon.png"
