@@ -92,7 +92,12 @@ function useSubscriptionContext() {
 
   const customerInfo = customerInfoQuery.data;
   const offerings = offeringsQuery.data;
-  const packageToPurchase = offerings?.current?.availablePackages[0];
+  const availablePackages = offerings?.current?.availablePackages ?? [];
+  const packageToPurchase =
+    availablePackages.find((item) => item.product.identifier === 'pro_monthly:monthly') ??
+    availablePackages.find((item) => item.product.identifier === 'pro_monthly') ??
+    availablePackages.find((item) => item.identifier === '$rc_monthly') ??
+    availablePackages[0];
   const isSubscribed =
     customerInfo?.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
   const queryError = customerInfoQuery.error ?? offeringsQuery.error;
