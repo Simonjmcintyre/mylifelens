@@ -69,7 +69,7 @@ export default function CaptureScreen() {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 25 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="x" size={23} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Add progress frame</Text><View style={{ width: 42 }} /></View>
+        <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="x" size={23} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Add progress frame</Text><Pressable testID="header-save-button" accessibilityRole="button" accessibilityLabel="Save progress frame" disabled={!selectedUri || isSaving} onPress={() => void savePhoto()} style={({ pressed }) => [styles.headerSaveButton, pressed && selectedUri && styles.pressed]}><Text style={[styles.headerSaveText, { color: selectedUri ? colors.primary : colors.mutedForeground }, (!selectedUri || isSaving) && styles.headerSaveDisabled]}>{isSaving ? 'Saving…' : 'Save'}</Text></Pressable></View>
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>ALIGN YOUR NEXT FRAME</Text><Text style={[styles.title, { color: colors.foreground }]}>Line it up, then let time do the rest.</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your last photo appears as a ghost so you can match the angle and see what’s changing.</Text></View>
 
         <View style={[styles.preview, { backgroundColor: colors.foreground }]}>
@@ -93,6 +93,9 @@ const styles = StyleSheet.create({
   topBar: { height: 62, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   backButton: { width: 42, height: 42, justifyContent: 'center' },
   topTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  headerSaveButton: { width: 58, height: 42, alignItems: 'flex-end', justifyContent: 'center' },
+  headerSaveText: { fontFamily: 'Inter_700Bold', fontSize: 14 },
+  headerSaveDisabled: { opacity: 0.45 },
   heading: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22 },
   eyebrow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.4 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 31, lineHeight: 35, letterSpacing: -1.2, marginTop: 10 },

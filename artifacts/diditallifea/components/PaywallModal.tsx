@@ -3,6 +3,7 @@ import { useColors } from '@/hooks/useColors';
 import { isRevenueCatTestMode, useSubscription } from '@/lib/revenuecat';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { PurchasesPackage } from 'react-native-purchases';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type PaywallModalProps = {
@@ -20,7 +21,8 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
-    packageToPurchase,
+    monthlyPackage,
+    annualPackage,
     isSubscribed,
     isLoading,
     isAvailable,
@@ -32,23 +34,53 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   } = useSubscription();
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [selectedPackageIdentifier, setSelectedPackageIdentifier] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) {
       setShowConfirmation(false);
       setActionMessage(null);
+      setSelectedPackageIdentifier(null);
     }
   }, [visible]);
 
-  const price = packageToPurchase?.product.priceString;
+  const selectedPackage =
+    [annualPackage, monthlyPackage].find(
+      (item) => item?.identifier === selectedPackageIdentifier,
+    ) ??
+    annualPackage ??
+    monthlyPackage;
   const isBusy = isPurchasing || isRestoring;
+  const savings =
+    annualPackage && monthlyPackage
+      ? Math.max(
+          0,
+          Math.round(
+            (1 - annualPackage.product.price / (monthlyPackage.product.price * 12)) * 100,
+          ),
+        )
+      : 0;
+  const plans: Array<{ label: string; detail: string; package: PurchasesPackage | null }> = [
+    {
+      label: 'Annual',
+      detail: annualPackage?.product.pricePerMonthString
+        ? `${annualPackage.product.pricePerMonthString}/month, billed yearly`
+        : 'Billed yearly',
+      package: annualPackage,
+    },
+    {
+      label: 'Monthly',
+      detail: 'Billed monthly',
+      package: monthlyPackage,
+    },
+  ];
 
   const finishPurchase = async () => {
-    if (!packageToPurchase) return;
+    if (!selectedPackage) return;
     setShowConfirmation(false);
     setActionMessage(null);
     try {
-      await purchase(packageToPurchase);
+      await purchase(selectedPackage);
       setActionMessage('Pro is active. You can now create unlimited projects.');
     } catch (purchaseError) {
       if ((purchaseError as { userCancelled?: boolean }).userCancelled) return;
@@ -59,7 +91,7 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   };
 
   const startPurchase = () => {
-    if (!packageToPurchase || isBusy) return;
+    if (!selectedPackage || isBusy) return;
     if (isRevenueCatTestMode()) {
       setShowConfirmation(true);
       return;
@@ -139,14 +171,64 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
           )}
 
           {!isSubscribed && (
+            <View style={styles.planList} accessibilityRole="radiogroup">
+              {plans.map((plan) => {
+                const isSelected = plan.package?.identifier === selectedPackage?.identifier;
+                const isAnnual = plan.label === 'Annual';
+                return (
+                  <Pressable
+                    key={plan.label}
+                    testID={`plan-${plan.label.toLowerCase()}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected, disabled: !plan.package }}
+                    disabled={!plan.package || isBusy}
+                    onPress={() => setSelectedPackageIdentifier(plan.package?.identifier ?? null)}
+                    style={({ pressed }) => [
+                      styles.plan,
+                      {
+                        backgroundColor: isSelected ? colors.secondary : colors.card,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                      isSelected && styles.selectedPlan,
+                      !plan.package && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.planCopy}>
+                      <View style={styles.planTitleRow}>
+                        <Text style={[styles.planTitle, { color: colors.foreground }]}>
+                          {plan.label}
+                        </Text>
+                        {isAnnual && savings > 0 && (
+                          <View style={[styles.savingsBadge, { backgroundColor: colors.primary }]}>
+                            <Text style={[styles.savingsText, { color: colors.primaryForeground }]}>
+                              SAVE {savings}%
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.planDetail, { color: colors.mutedForeground }]}>
+                        {plan.package ? plan.detail : 'Not available'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.planPrice, { color: colors.foreground }]}>
+                      {plan.package?.product.priceString ?? '—'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {!isSubscribed && (
             <Pressable
               testID="purchase-pro"
-              disabled={!packageToPurchase || isBusy || !isAvailable}
+              disabled={!selectedPackage || isBusy || !isAvailable}
               onPress={startPurchase}
               style={({ pressed }) => [
                 styles.primaryButton,
                 { backgroundColor: colors.foreground },
-                (!packageToPurchase || isBusy || !isAvailable) && styles.disabled,
+                (!selectedPackage || isBusy || !isAvailable) && styles.disabled,
                 pressed && styles.pressed,
               ]}
             >
@@ -155,9 +237,15 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
               ) : (
                 <>
                   <Text style={[styles.primaryText, { color: colors.background }]}>
-                    {isLoading ? 'Loading offer…' : price ? `Get Pro · ${price}` : 'Offer unavailable'}
+                    {isLoading
+                      ? 'Loading offers…'
+                      : selectedPackage
+                        ? `Get Pro · ${selectedPackage.product.priceString}`
+                        : 'Offer unavailable'}
                   </Text>
-                  {!!price && <AppIcon name="arrow-right" size={18} color={colors.background} />}
+                  {!!selectedPackage && (
+                    <AppIcon name="arrow-right" size={18} color={colors.background} />
+                  )}
                 </>
               )}
             </Pressable>
@@ -206,7 +294,9 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
               Activate MyLifelens Pro?
             </Text>
             <Text style={[styles.confirmBody, { color: colors.mutedForeground }]}>
-              This uses RevenueCat’s test store. No real payment will be taken.
+              {selectedPackage
+                ? `${selectedPackage.product.priceString} for the selected ${selectedPackage === annualPackage ? 'annual' : 'monthly'} plan. This uses RevenueCat’s test store, so no real payment will be taken.`
+                : 'This uses RevenueCat’s test store. No real payment will be taken.'}
             </Text>
             <View style={styles.confirmActions}>
               <Pressable
@@ -247,6 +337,26 @@ const styles = StyleSheet.create({
   benefitText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 14, lineHeight: 19 },
   message: { borderRadius: 13, paddingHorizontal: 13, paddingVertical: 11, marginBottom: 12 },
   messageText: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 17 },
+  planList: { gap: 10, marginBottom: 14 },
+  plan: {
+    minHeight: 70,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  selectedPlan: { borderWidth: 2, paddingHorizontal: 13, paddingVertical: 11 },
+  planCopy: { flex: 1, gap: 4 },
+  planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  planTitle: { fontFamily: 'Inter_700Bold', fontSize: 15 },
+  planDetail: { fontFamily: 'Inter_400Regular', fontSize: 11, lineHeight: 15 },
+  planPrice: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  savingsBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
+  savingsText: { fontFamily: 'Inter_700Bold', fontSize: 9, letterSpacing: 0.5 },
   primaryButton: { height: 55, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   primaryText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   restoreButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
