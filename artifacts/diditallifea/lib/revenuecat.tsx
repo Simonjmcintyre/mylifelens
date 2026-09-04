@@ -93,11 +93,18 @@ function useSubscriptionContext() {
   const customerInfo = customerInfoQuery.data;
   const offerings = offeringsQuery.data;
   const availablePackages = offerings?.current?.availablePackages ?? [];
-  const packageToPurchase =
+  const monthlyPackage =
+    offerings?.current?.monthly ??
     availablePackages.find((item) => item.product.identifier === 'pro_monthly:monthly') ??
     availablePackages.find((item) => item.product.identifier === 'pro_monthly') ??
     availablePackages.find((item) => item.identifier === '$rc_monthly') ??
-    availablePackages[0];
+    null;
+  const annualPackage =
+    offerings?.current?.annual ??
+    availablePackages.find((item) => item.product.identifier === 'pro_annual:annual') ??
+    availablePackages.find((item) => item.product.identifier === 'pro_annual') ??
+    availablePackages.find((item) => item.identifier === '$rc_annual') ??
+    null;
   const isSubscribed =
     customerInfo?.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
   const queryError = customerInfoQuery.error ?? offeringsQuery.error;
@@ -105,7 +112,9 @@ function useSubscriptionContext() {
   return {
     customerInfo,
     offerings,
-    packageToPurchase,
+    monthlyPackage,
+    annualPackage,
+    availablePackages,
     isSubscribed,
     isLoading: customerInfoQuery.isLoading || offeringsQuery.isLoading,
     isAvailable: isInitialized,

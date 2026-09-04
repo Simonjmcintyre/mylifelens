@@ -110,6 +110,11 @@ export default function HomeScreen() {
   );
 
   const createProject = async () => {
+    if (!isSubscribed && realProjectCount >= FREE_PROJECT_LIMIT) {
+      setShowNew(false);
+      setShowPaywall(true);
+      return;
+    }
     if (!name.trim() || !subject.trim()) {
       Alert.alert('Add a little more', 'Give your project a name and say what you are tracking.');
       return;
@@ -213,7 +218,7 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <View><Text style={[styles.sectionTitle, { color: colors.foreground }]}>In progress</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>{activeProjects.length} {activeProjects.length === 1 ? 'story' : 'stories'} unfolding</Text></View>
-          <Pressable onPress={() => setShowNew(true)}><Text style={[styles.addText, { color: colors.primary }]}>New project</Text></Pressable>
+          <Pressable testID="new-project-section" onPress={openNewProject}><Text style={[styles.addText, { color: colors.primary }]}>New project</Text></Pressable>
         </View>
 
         {activeProjects.length ? activeProjects.map((project) => <ProjectCard key={project.id} project={project} onReminder={() => setShowReminder(project)} />) : (
