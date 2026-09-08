@@ -15,6 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.mylifelens.app",
+      "buildNumber": "1",
       "supportsTablet": false
     },
     "android": {

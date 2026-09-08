@@ -32,6 +32,8 @@ type ProjectContextValue = {
   isLoaded: boolean;
   addProject: (name: string, subject: string, location: string, reminderHours?: number) => Promise<AddProjectResult>;
   addPhoto: (projectId: string, photo: Omit<ProgressPhoto, 'id'>) => Promise<void>;
+  deletePhoto: (projectId: string, photoId: string) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   setReminder: (projectId: string, intervalHours: number, enabled: boolean) => Promise<ReminderResult>;
   completeProject: (projectId: string) => Promise<void>;
 };
@@ -240,6 +242,20 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
             : project,
         );
         await persist(next);
+      },
+      deletePhoto: async (projectId, photoId) => {
+        await persist(
+          projects.map((project) =>
+            project.id === projectId
+              ? { ...project, photos: project.photos.filter((photo) => photo.id !== photoId) }
+              : project,
+          ),
+        );
+      },
+      deleteProject: async (projectId) => {
+        const project = projects.find((item) => item.id === projectId);
+        await cancelNotification(project?.scheduledNotificationId);
+        await persist(projects.filter((item) => item.id !== projectId));
       },
       setReminder: async (projectId, intervalHours, enabled) => {
         const project = projects.find((item) => item.id === projectId);

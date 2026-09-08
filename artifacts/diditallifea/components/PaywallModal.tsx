@@ -2,7 +2,15 @@ import { AppIcon } from '@/components/AppIcon';
 import { useColors } from '@/hooks/useColors';
 import { isRevenueCatTestMode, useSubscription } from '@/lib/revenuecat';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,6 +24,12 @@ const benefits = [
   'Keep every progress story in one place',
   'Use alignment, reminders, morphs and sharing',
 ];
+
+const PRIVACY_POLICY_URL =
+  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL ??
+  'https://digital-life.replit.app/privacy-policy';
+const TERMS_OF_USE_URL =
+  'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const colors = useColors();
@@ -278,6 +292,21 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
           <Text style={[styles.legal, { color: colors.mutedForeground }]}>
             Payment renews through your app store unless cancelled in your store settings.
           </Text>
+          <View style={styles.legalLinks}>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+            >
+              <Text style={[styles.legalLink, { color: colors.primary }]}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={[styles.legalSeparator, { color: colors.mutedForeground }]}>·</Text>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(TERMS_OF_USE_URL)}
+            >
+              <Text style={[styles.legalLink, { color: colors.primary }]}>Terms of Use</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -362,6 +391,9 @@ const styles = StyleSheet.create({
   restoreButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   restoreText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   legal: { fontFamily: 'Inter_400Regular', textAlign: 'center', fontSize: 10, lineHeight: 14, paddingHorizontal: 22 },
+  legalLinks: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
+  legalLink: { fontFamily: 'Inter_600SemiBold', fontSize: 11, lineHeight: 16, textDecorationLine: 'underline' },
+  legalSeparator: { fontFamily: 'Inter_400Regular', fontSize: 11 },
   disabled: { opacity: 0.48 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
   confirmBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

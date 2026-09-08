@@ -185,9 +185,6 @@ export default function HomeScreen() {
                 {isSubscribed ? 'PRO' : 'GO PRO'}
               </Text>
             </Pressable>
-            <Pressable testID="new-project-top" onPress={openNewProject} style={[styles.iconButton, { backgroundColor: colors.card }]}>
-              <AppIcon name="plus" size={21} color={colors.foreground} />
-            </Pressable>
           </View>
         </View>
 
@@ -218,7 +215,6 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <View><Text style={[styles.sectionTitle, { color: colors.foreground }]}>In progress</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>{activeProjects.length} {activeProjects.length === 1 ? 'story' : 'stories'} unfolding</Text></View>
-          <Pressable testID="new-project-section" onPress={openNewProject}><Text style={[styles.addText, { color: colors.primary }]}>New project</Text></Pressable>
         </View>
 
         {activeProjects.length ? activeProjects.map((project) => <ProjectCard key={project.id} project={project} onReminder={() => setShowReminder(project)} />) : (
@@ -265,10 +261,9 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   proBadge: { height: 38, borderRadius: 14, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
   proBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.7 },
-  iconButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   intro: { paddingTop: 42, paddingBottom: 26 },
   eyebrow: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1.8 },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 39, lineHeight: 42, letterSpacing: -1.8, marginTop: 10 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 39, lineHeight: 48, letterSpacing: -1.8, marginTop: 10, paddingBottom: 2 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 22, marginTop: 13, maxWidth: 305 },
   newProjectTab: { alignSelf: 'flex-end', height: 42, borderRadius: 16, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12 },
   newProjectTabText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
@@ -281,7 +276,6 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 31, marginBottom: 14 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 21, letterSpacing: -0.5 },
   sectionHint: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 4 },
-  addText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginBottom: 3 },
   projectCard: { borderRadius: 21, overflow: 'hidden', marginBottom: 14 },
   cardImageWrap: { height: 188, position: 'relative' },
   cardImage: { width: '100%', height: '100%' },

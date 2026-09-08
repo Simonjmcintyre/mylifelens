@@ -6,18 +6,21 @@ import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const formatDate = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date));
 
-function PhotoTile({ project, index }: { project: Project; index: number }) {
+function PhotoTile({ project, index, onDelete }: { project: Project; index: number; onDelete: (photoId: string) => void }) {
   const colors = useColors();
   const photo = project.photos[index];
   return (
     <View style={[styles.photoTile, { backgroundColor: colors.card }]}>
-      <PhotoImage uri={photo.uri} style={styles.tileImage} />
+      <View style={styles.tileImageWrap}>
+        <PhotoImage uri={photo.uri} style={styles.tileImage} />
+        <Pressable testID={`delete-photo-${photo.id}`} accessibilityRole="button" accessibilityLabel={`Delete frame ${index + 1}`} onPress={() => onDelete(photo.id)} style={({ pressed }) => [styles.deletePhotoButton, { backgroundColor: colors.card }, pressed && styles.pressed]}><Feather name="trash-2" size={16} color={colors.destructive} /></Pressable>
+      </View>
       <View style={styles.tileMeta}><Text style={[styles.tileDate, { color: colors.foreground }]}>{index === 0 ? 'First frame' : `Frame ${String(index + 1).padStart(2, '0')}`}</Text><Text style={[styles.tileDate, { color: colors.mutedForeground }]}>{formatDate(photo.capturedAt)}</Text></View>
     </View>
   );
@@ -27,7 +30,7 @@ export default function ProjectScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { projects, setReminder } = useProjects();
+  const { projects, setReminder, deletePhoto, deleteProject } = useProjects();
   const project = projects.find((item) => item.id === id);
   const [showReminder, setShowReminder] = useState(false);
   const [isSavingReminder, setIsSavingReminder] = useState(false);
@@ -57,6 +60,28 @@ export default function ProjectScreen() {
     setShowReminder(false);
   };
 
+  const confirmDelete = (title: string, message: string, action: () => Promise<void>) => {
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm?.(`${title}\n\n${message}`)) void action();
+      return;
+    }
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void action() },
+    ]);
+  };
+
+  const confirmDeletePhoto = (photoId: string) => {
+    confirmDelete('Delete this photo?', 'This progress frame will be removed from the project on this device.', () => deletePhoto(project.id, photoId));
+  };
+
+  const confirmDeleteProject = () => {
+    confirmDelete('Delete this project?', 'This will remove the project and all of its progress photos from this device.', async () => {
+      await deleteProject(project.id);
+      router.replace('/');
+    });
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 30 }}>
@@ -66,8 +91,9 @@ export default function ProjectScreen() {
         <View style={styles.stats}><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.photos.length}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>frames captured</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{Math.max(0, Math.floor((Date.now() - new Date(project.startedAt).getTime()) / 86400000))}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>days in motion</Text></View><View style={[styles.statDivider, { backgroundColor: colors.border }]} /><View><Text style={[styles.statNumber, { color: colors.foreground }]}>{project.reminderEnabled ? formatReminderShort(getReminderHours(project)) : '—'}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>check-in rhythm</Text></View></View>
         {!project.completed && <Pressable testID="edit-reminder-button" onPress={() => setShowReminder(true)} style={[styles.reminderCard, { backgroundColor: colors.card, borderColor: colors.border }]}><View style={[styles.reminderCardIcon, { backgroundColor: colors.accent }]}><Feather name="bell" size={17} color={colors.accentForeground} /></View><View style={styles.reminderCardCopy}><Text style={[styles.reminderCardTitle, { color: colors.foreground }]}>{project.reminderEnabled ? 'Reminder set' : 'Set a check-in reminder'}</Text><Text style={[styles.reminderCardBody, { color: colors.mutedForeground }]}>{project.reminderEnabled ? `${formatReminderShort(getReminderHours(project))} · Tap to change` : 'Choose how often MyLifelens should nudge you'}</Text></View><Feather name="chevron-right" size={19} color={colors.mutedForeground} /></Pressable>}
         <View style={styles.sectionHeading}><Text style={[styles.sectionTitle, { color: colors.foreground }]}>The journey so far</Text><Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Newest frame on top</Text></View>
-        {project.photos.length ? [...project.photos].reverse().map((_, reversedIndex) => <PhotoTile key={project.photos[project.photos.length - 1 - reversedIndex].id} project={project} index={project.photos.length - 1 - reversedIndex} />) : <View style={[styles.empty, { borderColor: colors.border }]}><Feather name="image" size={25} color={colors.mutedForeground} /><Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your first frame is waiting</Text><Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Use the camera button to set the starting point.</Text></View>}
+        {project.photos.length ? [...project.photos].reverse().map((_, reversedIndex) => <PhotoTile key={project.photos[project.photos.length - 1 - reversedIndex].id} project={project} index={project.photos.length - 1 - reversedIndex} onDelete={confirmDeletePhoto} />) : <View style={[styles.empty, { borderColor: colors.border }]}><Feather name="image" size={25} color={colors.mutedForeground} /><Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your first frame is waiting</Text><Text style={[styles.emptyBody, { color: colors.mutedForeground }]}>Use the camera button to set the starting point.</Text></View>}
         {!project.completed && project.photos.length >= 2 && <Pressable testID="finish-project-button" onPress={() => router.push({ pathname: '/timeline', params: { id: project.id, finishing: 'true' } })} style={styles.finishButton}><Feather name="flag" size={17} color={colors.mutedForeground} /><Text style={[styles.finishText, { color: colors.mutedForeground }]}>This project is finished</Text></Pressable>}
+        <Pressable testID="delete-project-button" onPress={confirmDeleteProject} style={({ pressed }) => [styles.deleteProjectButton, { borderColor: colors.destructive }, pressed && styles.pressed]}><Feather name="trash-2" size={16} color={colors.destructive} /><Text style={[styles.deleteProjectText, { color: colors.destructive }]}>Delete project</Text></Pressable>
       </ScrollView>
       <Modal visible={showReminder} animationType="slide" transparent onRequestClose={() => setShowReminder(false)}>
         <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(23, 33, 43, 0.45)' }]}><View style={[styles.sheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20 }]}>
@@ -113,7 +139,9 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, letterSpacing: -0.5 },
   sectionHint: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 4 },
   photoTile: { marginHorizontal: 20, borderRadius: 18, overflow: 'hidden', marginBottom: 14 },
+  tileImageWrap: { position: 'relative' },
   tileImage: { height: 230, width: '100%' },
+  deletePhotoButton: { position: 'absolute', right: 12, top: 12, width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   tileMeta: { paddingHorizontal: 15, paddingVertical: 14, flexDirection: 'row', justifyContent: 'space-between' },
   tileDate: { fontFamily: 'Inter_500Medium', fontSize: 12 },
   empty: { marginHorizontal: 20, borderWidth: 1, borderStyle: 'dashed', borderRadius: 20, padding: 27, alignItems: 'center' },
@@ -121,6 +149,8 @@ const styles = StyleSheet.create({
   emptyBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 7 },
   finishButton: { flexDirection: 'row', gap: 7, justifyContent: 'center', alignItems: 'center', paddingVertical: 23 },
   finishText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  deleteProjectButton: { marginHorizontal: 20, marginTop: 10, height: 48, borderWidth: 1, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  deleteProjectText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12 },
   sheetHandle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 3, backgroundColor: '#C9C3B8', marginBottom: 20 },
