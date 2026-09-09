@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
+import type { PhotoAlignment } from '@/lib/photo-alignment';
 
 export type ProgressPhoto = {
   id: string;
@@ -10,7 +11,7 @@ export type ProgressPhoto = {
   note?: string;
   isSample?: boolean;
   /** Offset used to align this frame with the frame captured immediately before it. */
-  alignmentOffset?: { x: number; y: number };
+  alignmentOffset?: PhotoAlignment;
 };
 
 export type Project = {
