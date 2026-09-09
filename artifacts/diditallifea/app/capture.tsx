@@ -18,6 +18,7 @@ export default function CaptureScreen() {
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.45);
   const [ghostOffset, setGhostOffset] = useState({ x: 0, y: 0 });
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
   const [isSaving, setIsSaving] = useState(false);
   const [note, setNote] = useState('Aligned the new frame to the previous frame');
   const ghostOffsetRef = useRef({ x: 0, y: 0 });
@@ -53,13 +54,29 @@ export default function CaptureScreen() {
     const result = mode === 'camera'
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false });
-    if (!result.canceled && result.assets[0]) setSelectedUri(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      ghostOffsetRef.current = { x: 0, y: 0 };
+      setGhostOffset({ x: 0, y: 0 });
+      setSelectedUri(result.assets[0].uri);
+    }
   };
 
   const savePhoto = async () => {
     if (!selectedUri || !project) return;
     setIsSaving(true);
-    await addPhoto(project.id, { uri: selectedUri, capturedAt: new Date().toISOString(), note });
+    await addPhoto(project.id, {
+      uri: selectedUri,
+      capturedAt: new Date().toISOString(),
+      note,
+      ...(previous && previewSize.width > 0 && previewSize.height > 0
+        ? {
+            alignmentOffset: {
+              x: ghostOffset.x / previewSize.width,
+              y: ghostOffset.y / previewSize.height,
+            },
+          }
+        : {}),
+    });
     setIsSaving(false);
     router.replace({ pathname: '/project', params: { id: project.id } });
   };
@@ -72,7 +89,13 @@ export default function CaptureScreen() {
         <View style={styles.topBar}><Pressable onPress={() => router.back()} style={styles.backButton}><Feather name="x" size={23} color={colors.foreground} /></Pressable><Text style={[styles.topTitle, { color: colors.foreground }]}>Add progress frame</Text><View style={styles.topBarSpacer} /></View>
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>ALIGN YOUR NEXT FRAME</Text><Text style={[styles.title, { color: colors.foreground }]}>Line it up, then let time do the rest.</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your last photo appears as a ghost so you can match the angle and see what’s changing.</Text></View>
 
-        <View style={[styles.preview, { backgroundColor: colors.foreground }]}>
+        <View
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setPreviewSize({ width, height });
+          }}
+          style={[styles.preview, { backgroundColor: colors.foreground }]}
+        >
           {selectedUri && previous ? <><PhotoImage uri={previous.uri} style={styles.previewImage} resizeMode="cover" /><View {...panResponder.panHandlers} style={[styles.ghostLayer, { opacity, transform: [{ translateX: ghostOffset.x }, { translateY: ghostOffset.y }] }]}><Image source={{ uri: selectedUri }} style={styles.previewImage} resizeMode="cover" /></View></> : selectedUri ? <Image source={{ uri: selectedUri }} style={styles.previewImage} resizeMode="cover" /> : <View style={styles.previewEmpty}><Feather name="camera" size={34} color="#C7D4CB" /><Text style={[styles.previewEmptyTitle, { color: colors.background }]}>Choose how to add this frame</Text><Text style={[styles.previewEmptyBody, { color: '#C7D4CB' }]}>Take a fresh photo or pick one from your library.</Text></View>}
           {selectedUri && previous && <View style={[styles.ghostBadge, { backgroundColor: colors.primary }]}><Feather name="move" size={13} color={colors.primaryForeground} /><Text style={[styles.ghostBadgeText, { color: colors.primaryForeground }]}>New frame {Math.round(opacity * 100)}%</Text></View>}
           {selectedUri && <View style={styles.crosshair}><View style={[styles.crosshairH, { backgroundColor: colors.primary }]} /><View style={[styles.crosshairV, { backgroundColor: colors.primary }]} /></View>}

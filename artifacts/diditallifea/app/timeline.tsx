@@ -28,6 +28,7 @@ export default function TimelineScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
   const [morphSpeed, setMorphSpeed] = useState(1);
+  const [morphStageSize, setMorphStageSize] = useState({ width: 0, height: 0 });
   const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
   const photos = project?.photos ?? [];
@@ -73,6 +74,7 @@ export default function TimelineScreen() {
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
+  const nextAlignment = photos[morphFrame + 1]?.alignmentOffset;
 
   const shareStory = async () => {
     try {
@@ -139,9 +141,15 @@ export default function TimelineScreen() {
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
 
         <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>
-          <View style={styles.morphStage}>
+           <View
+             onLayout={(event) => {
+               const { width, height } = event.nativeEvent.layout;
+               setMorphStageSize({ width, height });
+             }}
+             style={styles.morphStage}
+           >
             {photos.length > 0 ? <PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphImage} /> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
-            {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
+             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend, transform: [{ translateX: (nextAlignment?.x ?? 0) * morphStageSize.width }, { translateY: (nextAlignment?.y ?? 0) * morphStageSize.height }] }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
             {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
           </View>
           <View style={styles.morphControls}>

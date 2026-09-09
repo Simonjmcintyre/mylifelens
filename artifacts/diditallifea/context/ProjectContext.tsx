@@ -9,6 +9,8 @@ export type ProgressPhoto = {
   capturedAt: string;
   note?: string;
   isSample?: boolean;
+  /** Offset used to align this frame with the frame captured immediately before it. */
+  alignmentOffset?: { x: number; y: number };
 };
 
 export type Project = {
