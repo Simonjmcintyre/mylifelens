@@ -151,8 +151,8 @@ export default function TimelineScreen() {
              }}
              style={styles.morphStage}
            >
-             {photos.length > 0 ? <PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
-             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend, transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
+             {photos.length > 0 ? <View style={styles.morphFrame}><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /></View> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
+             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame + 1].uri} style={[styles.morphImage, { transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]} /></Animated.View>}
             {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
           </View>
           <View style={styles.morphControls}>
@@ -202,6 +202,8 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10 },
   morphCard: { marginHorizontal: 20, borderRadius: 21, padding: 12, overflow: 'hidden' },
   morphStage: { aspectRatio: PHOTO_ALIGNMENT_ASPECT_RATIO, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphFrame: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  morphBackdrop: { ...StyleSheet.absoluteFillObject, opacity: 0.82, transform: [{ scale: 1.12 }] },
   morphImage: { width: '100%', height: '100%' },
   morphOverlay: { ...StyleSheet.absoluteFillObject },
   morphEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
