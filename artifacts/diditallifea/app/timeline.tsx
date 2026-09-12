@@ -2,8 +2,9 @@ import { PhotoImage } from '@/components/PhotoImage';
 import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
+import { getCumulativePhotoAlignments, PHOTO_ALIGNMENT_ASPECT_RATIO } from '@/lib/photo-alignment';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, GestureResponderEvent, PanResponder, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,9 +29,11 @@ export default function TimelineScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
   const [morphSpeed, setMorphSpeed] = useState(1);
+  const [morphStageSize, setMorphStageSize] = useState({ width: 0, height: 0 });
   const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
   const photos = project?.photos ?? [];
+  const photoAlignments = useMemo(() => getCumulativePhotoAlignments(photos), [photos]);
   const speedOptions = [0.5, 1, 1.5, 2];
   const speedPanResponder = useRef(
     PanResponder.create({
@@ -73,6 +76,8 @@ export default function TimelineScreen() {
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
+  const currentAlignment = photoAlignments[morphFrame] ?? { x: 0, y: 0, scale: 1 };
+  const nextAlignment = photoAlignments[morphFrame + 1] ?? currentAlignment;
 
   const shareStory = async () => {
     try {
@@ -139,9 +144,15 @@ export default function TimelineScreen() {
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
 
         <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>
-          <View style={styles.morphStage}>
-            {photos.length > 0 ? <PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphImage} /> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
-            {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
+           <View
+             onLayout={(event) => {
+               const { width, height } = event.nativeEvent.layout;
+               setMorphStageSize({ width, height });
+             }}
+             style={styles.morphStage}
+           >
+             {photos.length > 0 ? <View style={styles.morphFrame}><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /></View> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
+             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame + 1].uri} style={[styles.morphImage, { transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]} /></Animated.View>}
             {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
           </View>
           <View style={styles.morphControls}>
@@ -190,7 +201,9 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Inter_700Bold', fontSize: 34, letterSpacing: -1.5, marginTop: 10 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10 },
   morphCard: { marginHorizontal: 20, borderRadius: 21, padding: 12, overflow: 'hidden' },
-  morphStage: { height: 290, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphStage: { aspectRatio: PHOTO_ALIGNMENT_ASPECT_RATIO, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphFrame: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  morphBackdrop: { ...StyleSheet.absoluteFillObject, opacity: 0.82, transform: [{ scale: 1.12 }] },
   morphImage: { width: '100%', height: '100%' },
   morphOverlay: { ...StyleSheet.absoluteFillObject },
   morphEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
