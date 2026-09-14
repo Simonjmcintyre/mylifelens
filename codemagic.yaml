@@ -153,6 +153,9 @@ workflows:
           python3 -c 'import json, sys; path = "app.json"; data = json.load(open(path)); build_version = str(sys.argv[1]); data["expo"]["ios"]["buildNumber"] = build_version; data["expo"]["version"] = f"1.0.{build_version}"; open(path, "w").write(json.dumps(data, indent=2) + "\n")' "$BUILD_VERSION"
           echo "Generating iOS build $BUILD_VERSION"
           npx --yes pnpm@10.26.1 exec expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          cd ..
       - name: Install iOS signing certificate
         script: |
           keychain initialize
