@@ -96,9 +96,6 @@ workflows:
     integrations:
       app_store_connect: MyLifelens Apple
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.mylifelens.app
       node: v22.13.1
       xcode: latest
       vars:
