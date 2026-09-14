@@ -151,6 +151,11 @@ workflows:
           python3 -c 'import json, sys; path = "app.json"; data = json.load(open(path)); build_version = str(sys.argv[1]); data["expo"]["ios"]["buildNumber"] = build_version; data["expo"]["version"] = f"1.0.{build_version}"; open(path, "w").write(json.dumps(data, indent=2) + "\n")' "$BUILD_VERSION"
           echo "Generating iOS build $BUILD_VERSION"
           npx --yes pnpm@10.26.1 exec expo prebuild --platform ios --no-install
+      - name: Create iOS signing files
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
       - name: Set up iOS code signing
         script: |
           xcode-project use-profiles
