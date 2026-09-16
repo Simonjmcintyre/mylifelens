@@ -1,6 +1,7 @@
 package expo.modules.morphexport
 
 import android.graphics.*
+import android.graphics.Matrix as GraphicsMatrix
 import android.media.*
 import android.net.Uri
 import android.opengl.*
@@ -116,7 +117,7 @@ class ExpoMorphExportModule : Module() {
       val cover = maxOf(width.toFloat() / source.bitmap.width, height.toFloat() / source.bitmap.height)
       val scaledWidth = source.bitmap.width * cover * source.meta.scale
       val scaledHeight = source.bitmap.height * cover * source.meta.scale
-      val matrix = Matrix().apply {
+      val matrix = GraphicsMatrix().apply {
         setScale(cover * source.meta.scale, cover * source.meta.scale)
         postTranslate((width - scaledWidth) / 2f + source.meta.x * width, (height - scaledHeight) / 2f + source.meta.y * height)
       }
@@ -159,7 +160,7 @@ private data class MorphSource(val uri: Uri, val x: Float, val y: Float, val sca
         ExifInterface.ORIENTATION_ROTATE_270 -> 270f
         else -> 0f
       }
-      val matrix = Matrix().apply {
+      val matrix = GraphicsMatrix().apply {
         when (orientation) {
           ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
           ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
