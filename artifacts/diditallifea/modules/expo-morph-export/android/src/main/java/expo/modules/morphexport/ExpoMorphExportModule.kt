@@ -299,7 +299,7 @@ private class CodecSurface(private val surfaceRef: Surface, private val width: I
   private val eglSurface: EGLSurface
   private val texture: Int
   private val program: Int
-  private val vertexBuffer = java.nio.ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+  private val vertexBuffer = java.nio.ByteBuffer.allocateDirect(8 * Float.SIZE_BYTES).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
   init {
     if (display == EGL14.EGL_NO_DISPLAY) throw Exception("EGL display is unavailable")
     if (!EGL14.eglInitialize(display, intArrayOf(0, 0), 0, intArrayOf(0, 0), 0)) throw eglError("Could not initialise EGL")
