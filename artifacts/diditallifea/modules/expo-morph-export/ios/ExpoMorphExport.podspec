@@ -7,6 +7,13 @@ Pod::Spec.new do |s|
   s.homepage       = 'https://mylifelens.app'
   s.source         = { git: 'https://example.invalid/expo-morph-export.git' }
   s.platforms      = { ios: '15.1' }
+  s.swift_version  = '5.9'
+  s.module_name    = 'ExpoMorphExport'
+  s.static_framework = true
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+  }
   s.source_files   = 'ios/**/*.{h,m,mm,swift}'
   s.resources      = 'ios/Resources/*'
   s.dependency 'ExpoModulesCore'
