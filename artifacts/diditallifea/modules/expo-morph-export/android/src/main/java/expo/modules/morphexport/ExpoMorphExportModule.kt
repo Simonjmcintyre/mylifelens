@@ -47,9 +47,25 @@ class ExpoMorphExportModule : Module() {
   }
 
   private fun encode(frames: List<MorphSource>, output: File, width: Int, height: Int, fps: Int, hold: Int, transition: Int) {
-    // Hardware AVC encoders commonly require macroblock-aligned dimensions.
-    val outputWidth = (width / 16 * 16).coerceAtLeast(320)
-    val outputHeight = (height / 16 * 16).coerceAtLeast(320)
+    val encoderInfo = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info ->
+      info.isEncoder &&
+        info.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_AVC, ignoreCase = true) } &&
+        runCatching {
+          info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).colorFormats.contains(
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface,
+          )
+        }.getOrDefault(false)
+    } ?: throw Exception("This phone has no compatible H.264 video encoder")
+    val videoCapabilities = encoderInfo
+      .getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
+      .videoCapabilities
+    val widthAlignment = maxOf(16, videoCapabilities.widthAlignment)
+    val heightAlignment = maxOf(16, videoCapabilities.heightAlignment)
+    val outputWidth = (width / widthAlignment * widthAlignment).coerceAtLeast(320)
+    val outputHeight = (height / heightAlignment * heightAlignment).coerceAtLeast(320)
+    if (!videoCapabilities.areSizeAndRateSupported(outputWidth, outputHeight, fps.toDouble())) {
+      throw Exception("This phone cannot encode a ${outputWidth}×${outputHeight} H.264 video at ${fps}fps")
+    }
     val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outputWidth, outputHeight).apply {
       setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
       setInteger(MediaFormat.KEY_BIT_RATE, (outputWidth * outputHeight * 4).coerceIn(1_500_000, 8_000_000))
@@ -57,9 +73,9 @@ class ExpoMorphExportModule : Module() {
       setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
     }
     val codec = try {
-      MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+      MediaCodec.createByCodecName(encoderInfo.name)
     } catch (error: Throwable) {
-      throw Exception("Could not create the H.264 encoder", error)
+      throw Exception("Could not open the phone's H.264 encoder: ${error.message ?: error.javaClass.simpleName}", error)
     }
     var egl: CodecSurface? = null
     var muxer: MediaMuxer? = null
@@ -106,13 +122,32 @@ class ExpoMorphExportModule : Module() {
     try {
       try {
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+      } catch (error: Throwable) {
+        throw Exception("The phone rejected the H.264 video settings: ${error.message ?: error.javaClass.simpleName}", error)
+      }
+      val input = try {
         val input = codec.createInputSurface()
+        input
+      } catch (error: Throwable) {
+        throw Exception("The phone could not create the video input surface: ${error.message ?: error.javaClass.simpleName}", error)
+      }
+      try {
         codec.start()
         codecStarted = true
+      } catch (error: Throwable) {
+        input.release()
+        throw Exception("The phone could not start its H.264 encoder: ${error.message ?: error.javaClass.simpleName}", error)
+      }
+      try {
         egl = CodecSurface(input, outputWidth, outputHeight)
+      } catch (error: Throwable) {
+        input.release()
+        throw Exception("The phone could not connect OpenGL to the video encoder: ${error.message ?: error.javaClass.simpleName}", error)
+      }
+      try {
         muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
       } catch (error: Throwable) {
-        throw Exception("Could not initialise the Android video encoder", error)
+        throw Exception("The phone could not create the MP4 file: ${error.message ?: error.javaClass.simpleName}", error)
       }
       for (i in frames.indices) {
         val current = frames[i].load(appContext.reactContext!!, outputWidth, outputHeight)
