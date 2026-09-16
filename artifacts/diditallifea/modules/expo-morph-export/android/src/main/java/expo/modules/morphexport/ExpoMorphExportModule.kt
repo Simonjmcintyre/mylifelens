@@ -12,7 +12,6 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
 import kotlin.concurrent.thread
 
@@ -36,37 +35,68 @@ class ExpoMorphExportModule : Module() {
           encode(frames, out, width, height, fps, hold, transition)
           promise.resolve(mapOf("uri" to Uri.fromFile(out).toString(), "duration" to frameCount.toDouble() / fps))
         } catch (error: Throwable) {
-          promise.reject("EXPORT_FAILED", error.message ?: "Video export failed.", error)
+          val detail = generateSequence(error) { it.cause }
+            .mapNotNull { cause -> cause.message?.takeIf { it.isNotBlank() } }
+            .distinct()
+            .joinToString(" — ")
+            .ifBlank { error.javaClass.simpleName }
+          promise.reject("EXPORT_FAILED", detail, error)
         }
       }
     }
   }
 
   private fun encode(frames: List<MorphSource>, output: File, width: Int, height: Int, fps: Int, hold: Int, transition: Int) {
-    val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+    // Hardware AVC encoders commonly require macroblock-aligned dimensions.
+    val outputWidth = (width / 16 * 16).coerceAtLeast(320)
+    val outputHeight = (height / 16 * 16).coerceAtLeast(320)
+    val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outputWidth, outputHeight).apply {
       setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-      setInteger(MediaFormat.KEY_BIT_RATE, (width * height * 4).coerceIn(1_500_000, 8_000_000))
+      setInteger(MediaFormat.KEY_BIT_RATE, (outputWidth * outputHeight * 4).coerceIn(1_500_000, 8_000_000))
       setInteger(MediaFormat.KEY_FRAME_RATE, fps)
       setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
     }
-    val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-    codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-    val input = codec.createInputSurface()
-    codec.start()
-    val egl = CodecSurface(input, width, height)
-    val muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    val codec = try {
+      MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+    } catch (error: Throwable) {
+      throw Exception("Could not create the H.264 encoder", error)
+    }
+    var egl: CodecSurface? = null
+    var muxer: MediaMuxer? = null
+    var codecStarted = false
     var track = -1
-    var started = false
+    var muxerStarted = false
+    var muxerFinalized = false
+    var samplesWritten = 0
     var pts = 0L
     fun drain(end: Boolean) {
       if (end) codec.signalEndOfInputStream()
       val info = MediaCodec.BufferInfo()
+      var idleAttempts = 0
       while (true) {
         when (val index = codec.dequeueOutputBuffer(info, 10_000)) {
-          MediaCodec.INFO_TRY_AGAIN_LATER -> if (!end) return
-          MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> { track = muxer.addTrack(codec.outputFormat); muxer.start(); started = true }
+          MediaCodec.INFO_TRY_AGAIN_LATER -> {
+            if (!end) return
+            idleAttempts++
+            if (idleAttempts >= 500) throw Exception("The H.264 encoder did not finish the video")
+          }
+          MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+            if (muxerStarted) throw Exception("The encoder changed format more than once")
+            track = requireNotNull(muxer).addTrack(codec.outputFormat)
+            requireNotNull(muxer).start()
+            muxerStarted = true
+          }
           else -> if (index >= 0) {
-            if (info.size > 0 && started) codec.getOutputBuffer(index)?.let { muxer.writeSampleData(track, it, info) }
+            idleAttempts = 0
+            if (info.size > 0 && (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+              if (!muxerStarted) throw Exception("The encoder produced video before its output format was ready")
+              codec.getOutputBuffer(index)?.let { buffer ->
+                buffer.position(info.offset)
+                buffer.limit(info.offset + info.size)
+                requireNotNull(muxer).writeSampleData(track, buffer, info)
+                samplesWritten++
+              }
+            }
             codec.releaseOutputBuffer(index, false)
             if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) return
           }
@@ -74,26 +104,43 @@ class ExpoMorphExportModule : Module() {
       }
     }
     try {
+      try {
+        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        val input = codec.createInputSurface()
+        codec.start()
+        codecStarted = true
+        egl = CodecSurface(input, outputWidth, outputHeight)
+        muxer = MediaMuxer(output.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+      } catch (error: Throwable) {
+        throw Exception("Could not initialise the Android video encoder", error)
+      }
       for (i in frames.indices) {
-        val current = frames[i].load(appContext.reactContext!!, width, height)
+        val current = frames[i].load(appContext.reactContext!!, outputWidth, outputHeight)
         val next = try {
-          frames.getOrNull(i + 1)?.load(appContext.reactContext!!, width, height)
+          frames.getOrNull(i + 1)?.load(appContext.reactContext!!, outputWidth, outputHeight)
         } catch (error: Throwable) {
           current.recycle()
           throw error
         }
         try {
-          repeat(hold) { submit(egl, compose(current, null, 0f, width, height), pts); pts += 1_000_000_000L / fps; drain(false) }
-          if (next != null) repeat(transition) { step -> val p = (step + 1).toFloat() / transition; submit(egl, compose(current, next, p, width, height), pts); pts += 1_000_000_000L / fps; drain(false) }
+          repeat(hold) { drain(false); submit(requireNotNull(egl), compose(current, null, 0f, outputWidth, outputHeight), pts); pts += 1_000_000_000L / fps; drain(false) }
+          if (next != null) repeat(transition) { step -> val p = (step + 1).toFloat() / transition; drain(false); submit(requireNotNull(egl), compose(current, next, p, outputWidth, outputHeight), pts); pts += 1_000_000_000L / fps; drain(false) }
         } finally {
           current.recycle()
           next?.recycle()
         }
       }
-      egl.release(); drain(true)
+      drain(true)
+      if (!muxerStarted || samplesWritten == 0) throw Exception("The H.264 encoder produced no usable video")
+      requireNotNull(muxer).stop()
+      muxerFinalized = true
     } finally {
-      if (started) muxer.stop()
-      muxer.release(); codec.stop(); codec.release()
+      try { egl?.release() } catch (_: Throwable) {}
+      if (muxerStarted && !muxerFinalized) try { muxer?.stop() } catch (_: Throwable) {}
+      try { muxer?.release() } catch (_: Throwable) {}
+      if (codecStarted) try { codec.stop() } catch (_: Throwable) {}
+      try { codec.release() } catch (_: Throwable) {}
+      if (!muxerFinalized || !output.exists() || output.length() == 0L) output.delete()
     }
   }
 
@@ -219,18 +266,22 @@ private class CodecSurface(private val surfaceRef: Surface, private val width: I
   private val program: Int
   private val vertexBuffer = java.nio.ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
   init {
-    EGL14.eglInitialize(display, intArrayOf(0, 0), 0, intArrayOf(0, 0), 0)
+    if (display == EGL14.EGL_NO_DISPLAY) throw Exception("EGL display is unavailable")
+    if (!EGL14.eglInitialize(display, intArrayOf(0, 0), 0, intArrayOf(0, 0), 0)) throw eglError("Could not initialise EGL")
     val config = arrayOfNulls<EGLConfig>(1)
     val count = intArrayOf(0)
-    EGL14.eglChooseConfig(display, intArrayOf(
+    val choseConfig = EGL14.eglChooseConfig(display, intArrayOf(
       EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT, EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-      EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_ALPHA_SIZE, 8,
+      EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8,
       0x3142, 1,
       EGL14.EGL_NONE
     ), 0, config, 0, 1, count, 0)
+    if (!choseConfig || count[0] < 1 || config[0] == null) throw eglError("No recordable EGL configuration is available")
     eglContext = EGL14.eglCreateContext(display, config[0], EGL14.EGL_NO_CONTEXT, intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE), 0)
+    if (eglContext == EGL14.EGL_NO_CONTEXT) throw eglError("Could not create the EGL context")
     eglSurface = EGL14.eglCreateWindowSurface(display, config[0], surfaceRef, intArrayOf(EGL14.EGL_NONE), 0)
-    EGL14.eglMakeCurrent(display, eglSurface, eglSurface, eglContext)
+    if (eglSurface == EGL14.EGL_NO_SURFACE) throw eglError("Could not create the encoder EGL surface")
+    if (!EGL14.eglMakeCurrent(display, eglSurface, eglSurface, eglContext)) throw eglError("Could not activate the encoder EGL surface")
     GLES20.glViewport(0, 0, width, height)
     texture = createTexture()
     program = createProgram()
@@ -238,17 +289,25 @@ private class CodecSurface(private val surfaceRef: Surface, private val width: I
   }
   fun draw(bitmap: Bitmap) {
     GLES20.glUseProgram(program)
+    GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
     GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+    GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
     val position = GLES20.glGetAttribLocation(program, "aPosition")
     GLES20.glEnableVertexAttribArray(position)
     GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer)
     GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+    val error = GLES20.glGetError()
+    if (error != GLES20.GL_NO_ERROR) throw Exception("OpenGL could not draw video frame (0x${Integer.toHexString(error)})")
     GLES20.glDisableVertexAttribArray(position)
     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
   }
-  fun setPresentationTime(time: Long) { EGLExt.eglPresentationTimeANDROID(display, eglSurface, time) }
-  fun swap() { EGL14.eglSwapBuffers(display, eglSurface) }
+  fun setPresentationTime(time: Long) {
+    if (!EGLExt.eglPresentationTimeANDROID(display, eglSurface, time)) throw eglError("Could not set the video frame timestamp")
+  }
+  fun swap() {
+    if (!EGL14.eglSwapBuffers(display, eglSurface)) throw eglError("Could not submit a video frame")
+  }
   fun release() {
     GLES20.glDeleteProgram(program); GLES20.glDeleteTextures(1, intArrayOf(texture), 0)
     EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
@@ -259,14 +318,25 @@ private class CodecSurface(private val surfaceRef: Surface, private val width: I
     val ids = intArrayOf(0); GLES20.glGenTextures(1, ids, 0); GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ids[0])
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
     GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
     return ids[0]
   }
   private fun createProgram(): Int {
     val vertex = compile(GLES20.GL_VERTEX_SHADER, "attribute vec2 aPosition; varying vec2 vUv; void main(){vUv=(aPosition+1.0)/2.0; gl_Position=vec4(aPosition,0.0,1.0);}")
     val fragment = compile(GLES20.GL_FRAGMENT_SHADER, "precision mediump float; varying vec2 vUv; uniform sampler2D uTexture; void main(){gl_FragColor=texture2D(uTexture,vec2(vUv.x,1.0-vUv.y));}")
-    val result = GLES20.glCreateProgram(); GLES20.glAttachShader(result, vertex); GLES20.glAttachShader(result, fragment); GLES20.glLinkProgram(result); return result
+    val result = GLES20.glCreateProgram(); GLES20.glAttachShader(result, vertex); GLES20.glAttachShader(result, fragment); GLES20.glLinkProgram(result)
+    val status = intArrayOf(0)
+    GLES20.glGetProgramiv(result, GLES20.GL_LINK_STATUS, status, 0)
+    if (status[0] == 0) throw Exception("Could not link the video shader: ${GLES20.glGetProgramInfoLog(result)}")
+    return result
   }
   private fun compile(type: Int, source: String): Int {
-    val shader = GLES20.glCreateShader(type); GLES20.glShaderSource(shader, source); GLES20.glCompileShader(shader); return shader
+    val shader = GLES20.glCreateShader(type); GLES20.glShaderSource(shader, source); GLES20.glCompileShader(shader)
+    val status = intArrayOf(0)
+    GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0)
+    if (status[0] == 0) throw Exception("Could not compile the video shader: ${GLES20.glGetShaderInfoLog(shader)}")
+    return shader
   }
+  private fun eglError(message: String) = Exception("$message (EGL 0x${Integer.toHexString(EGL14.eglGetError())})")
 }
