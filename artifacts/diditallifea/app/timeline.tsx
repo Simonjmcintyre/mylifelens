@@ -89,7 +89,8 @@ export default function TimelineScreen() {
         await Share.share({ message: caption });
         return;
       }
-      await Sharing.shareAsync(last.uri, {
+      const watermarked = await MorphExport.exportWatermarkedImage({ uri: last.uri });
+      await Sharing.shareAsync(watermarked.uri, {
         dialogTitle: `Share ${project.name}`,
         mimeType: 'image/jpeg',
         UTI: 'public.jpeg',

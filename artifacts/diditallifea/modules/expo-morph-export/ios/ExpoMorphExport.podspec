@@ -8,5 +8,6 @@ Pod::Spec.new do |s|
   s.source         = { git: 'https://example.invalid/expo-morph-export.git' }
   s.platforms      = { ios: '15.1' }
   s.source_files   = 'ios/**/*.{h,m,mm,swift}'
+  s.resources      = 'ios/Resources/*'
   s.dependency 'ExpoModulesCore'
 end

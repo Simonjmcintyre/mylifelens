@@ -19,6 +19,7 @@ export type MorphExportOptions = {
 
 type MorphExportModuleType = {
   exportMorph(options: MorphExportOptions): Promise<{ uri: string; duration: number }>;
+  exportWatermarkedImage(options: { uri: string }): Promise<{ uri: string }>;
 };
 
 const nativeModule = requireOptionalNativeModule<MorphExportModuleType>('ExpoMorphExport');
@@ -26,6 +27,9 @@ const nativeModule = requireOptionalNativeModule<MorphExportModuleType>('ExpoMor
 const unavailableModule: MorphExportModuleType = {
   async exportMorph() {
     throw new Error('Morph video export is available in installed MyLifelens builds, not Expo Go.');
+  },
+  async exportWatermarkedImage() {
+    throw new Error('Watermarked sharing is available in installed MyLifelens builds, not Expo Go.');
   },
 };
 

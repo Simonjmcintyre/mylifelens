@@ -12,6 +12,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import kotlin.concurrent.thread
 
@@ -41,6 +42,19 @@ class ExpoMorphExportModule : Module() {
             .joinToString(" — ")
             .ifBlank { error.javaClass.simpleName }
           promise.reject("EXPORT_FAILED", detail, error)
+        }
+      }
+    }
+    AsyncFunction("exportWatermarkedImage") { options: Map<String, Any?>, promise: Promise ->
+      thread {
+        try {
+          val uri = Uri.parse(options["uri"] as? String ?: throw Exception("Photo URI missing"))
+          val context = appContext.reactContext ?: throw Exception("The app is not ready to export this photo")
+          val output = File(context.cacheDir, "mylifelens-${UUID.randomUUID()}.jpg")
+          exportWatermarkedImage(context, uri, output)
+          promise.resolve(mapOf("uri" to Uri.fromFile(output).toString()))
+        } catch (error: Throwable) {
+          promise.reject("IMAGE_EXPORT_FAILED", error.message ?: "The shared photo could not be created.", error)
         }
       }
     }
@@ -80,6 +94,8 @@ class ExpoMorphExportModule : Module() {
     var egl: CodecSurface? = null
     var muxer: MediaMuxer? = null
     var codecStarted = false
+    var watermarkIcon: Bitmap? = null
+    var watermarkWordmark: Bitmap? = null
     var track = -1
     var muxerStarted = false
     var muxerFinalized = false
@@ -149,6 +165,10 @@ class ExpoMorphExportModule : Module() {
       } catch (error: Throwable) {
         throw Exception("The phone could not create the MP4 file: ${error.message ?: error.javaClass.simpleName}", error)
       }
+      watermarkIcon = BitmapFactory.decodeResource(appContext.reactContext!!.resources, R.drawable.mylifelens_watermark_icon)
+        ?: throw Exception("The MyLifelens watermark icon could not be loaded")
+      watermarkWordmark = BitmapFactory.decodeResource(appContext.reactContext!!.resources, R.drawable.mylifelens_watermark_wordmark)
+        ?: throw Exception("The MyLifelens wordmark could not be loaded")
       for (i in frames.indices) {
         val current = frames[i].load(appContext.reactContext!!, outputWidth, outputHeight)
         val next = try {
@@ -158,8 +178,8 @@ class ExpoMorphExportModule : Module() {
           throw error
         }
         try {
-          repeat(hold) { drain(false); submit(requireNotNull(egl), compose(current, null, 0f, outputWidth, outputHeight), pts); pts += 1_000_000_000L / fps; drain(false) }
-          if (next != null) repeat(transition) { step -> val p = (step + 1).toFloat() / transition; drain(false); submit(requireNotNull(egl), compose(current, next, p, outputWidth, outputHeight), pts); pts += 1_000_000_000L / fps; drain(false) }
+          repeat(hold) { drain(false); submit(requireNotNull(egl), compose(current, null, 0f, outputWidth, outputHeight, requireNotNull(watermarkIcon), requireNotNull(watermarkWordmark)), pts); pts += 1_000_000_000L / fps; drain(false) }
+          if (next != null) repeat(transition) { step -> val p = (step + 1).toFloat() / transition; drain(false); submit(requireNotNull(egl), compose(current, next, p, outputWidth, outputHeight, requireNotNull(watermarkIcon), requireNotNull(watermarkWordmark)), pts); pts += 1_000_000_000L / fps; drain(false) }
         } finally {
           current.recycle()
           next?.recycle()
@@ -173,6 +193,8 @@ class ExpoMorphExportModule : Module() {
       try { egl?.release() } catch (_: Throwable) {}
       if (muxerStarted && !muxerFinalized) try { muxer?.stop() } catch (_: Throwable) {}
       try { muxer?.release() } catch (_: Throwable) {}
+      watermarkIcon?.recycle()
+      watermarkWordmark?.recycle()
       if (codecStarted) try { codec.stop() } catch (_: Throwable) {}
       try { codec.release() } catch (_: Throwable) {}
       if (!muxerFinalized || !output.exists() || output.length() == 0L) output.delete()
@@ -189,7 +211,7 @@ class ExpoMorphExportModule : Module() {
     }
   }
 
-  private fun compose(current: FrameRender, next: FrameRender?, progress: Float, width: Int, height: Int): Bitmap {
+  private fun compose(current: FrameRender, next: FrameRender?, progress: Float, width: Int, height: Int, watermarkIcon: Bitmap, watermarkWordmark: Bitmap): Bitmap {
     val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(result)
     fun render(source: FrameRender): Bitmap {
@@ -214,7 +236,34 @@ class ExpoMorphExportModule : Module() {
       canvas.drawBitmap(nextImage, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = (progress * 255).toInt() })
       nextImage.recycle()
     }
+    drawWatermark(canvas, watermarkIcon, watermarkWordmark, width, height)
     return result
+  }
+
+  private fun exportWatermarkedImage(context: android.content.Context, uri: Uri, output: File) {
+    var source: Bitmap? = null
+    var icon: Bitmap? = null
+    var wordmark: Bitmap? = null
+    var result: Bitmap? = null
+    try {
+      source = decodeOrientedBitmap(context, uri, 2160)
+      icon = BitmapFactory.decodeResource(context.resources, R.drawable.mylifelens_watermark_icon)
+        ?: throw Exception("The MyLifelens watermark icon could not be loaded")
+      wordmark = BitmapFactory.decodeResource(context.resources, R.drawable.mylifelens_watermark_wordmark)
+        ?: throw Exception("The MyLifelens wordmark could not be loaded")
+      result = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(result)
+      canvas.drawBitmap(source, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG))
+      drawWatermark(canvas, icon, wordmark, source.width, source.height)
+      FileOutputStream(output).use { stream ->
+        if (!result.compress(Bitmap.CompressFormat.JPEG, 94, stream)) throw Exception("The shared photo could not be encoded")
+      }
+    } finally {
+      source?.recycle()
+      icon?.recycle()
+      wordmark?.recycle()
+      result?.recycle()
+    }
   }
 
 }
@@ -228,11 +277,17 @@ private data class MorphSource(val uri: Uri, val x: Float, val y: Float, val sca
   }
 
   fun load(context: android.content.Context, width: Int, height: Int): FrameRender {
+      val bitmap = decodeOrientedBitmap(context, uri, 1440)
+      val meta = MorphSource(uri, this.x, this.y, this.scale)
+      return FrameRender(meta, bitmap, createBlurredBackdrop(bitmap, width, height))
+  }
+}
+
+private fun decodeOrientedBitmap(context: android.content.Context, uri: Uri, maxDimension: Int): Bitmap {
       val bytes = (context.contentResolver.openInputStream(uri) ?: throw Exception("Photo could not be read")).use { it.readBytes() }
       val orientation = ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
       val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
       BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-      val maxDimension = 1440
       var sample = 1
       while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxDimension) sample *= 2
       val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }) ?: throw Exception("Photo could not be decoded")
@@ -259,9 +314,7 @@ private data class MorphSource(val uri: Uri, val x: Float, val y: Float, val sca
           if (transformed !== decoded) decoded.recycle()
         }
       }
-      val meta = MorphSource(uri, this.x, this.y, this.scale)
-      return FrameRender(meta, bitmap, createBlurredBackdrop(bitmap, width, height))
-  }
+      return bitmap
 }
 
 private class FrameRender(val meta: MorphSource, val bitmap: Bitmap, val backdrop: Bitmap) {
@@ -296,6 +349,27 @@ private fun createBlurredBackdrop(source: Bitmap, width: Int, height: Int): Bitm
   val blurred = Bitmap.createBitmap(smallWidth, smallHeight, Bitmap.Config.ARGB_8888)
   blurred.setPixels(pixels, 0, smallWidth, 0, 0, smallWidth, smallHeight)
   return Bitmap.createScaledBitmap(blurred, width, height, true).also { blurred.recycle() }
+}
+
+private fun drawWatermark(canvas: Canvas, icon: Bitmap, wordmark: Bitmap, width: Int, height: Int) {
+  val scale = minOf(width / 656f, height / 720f)
+  val edge = 24f * scale
+  val padding = 9f * scale
+  val iconSize = 40f * scale
+  val gap = 10f * scale
+  val wordmarkHeight = 19f * scale
+  val wordmarkWidth = wordmarkHeight * wordmark.width / wordmark.height
+  val pillWidth = padding + iconSize + gap + wordmarkWidth + 14f * scale
+  val pillHeight = iconSize + padding * 2
+  val left = edge
+  val top = height - edge - pillHeight
+  val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(184, 7, 17, 31) }
+  canvas.drawRoundRect(left, top, left + pillWidth, top + pillHeight, 12f * scale, 12f * scale, background)
+  val iconRect = RectF(left + padding, top + padding, left + padding + iconSize, top + padding + iconSize)
+  canvas.drawBitmap(icon, null, iconRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+  val wordmarkTop = top + (pillHeight - wordmarkHeight) / 2f
+  val wordmarkRect = RectF(iconRect.right + gap, wordmarkTop, iconRect.right + gap + wordmarkWidth, wordmarkTop + wordmarkHeight)
+  canvas.drawBitmap(wordmark, null, wordmarkRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
 }
 
 /** Minimal EGL wrapper kept local to avoid an ffmpeg dependency. */
