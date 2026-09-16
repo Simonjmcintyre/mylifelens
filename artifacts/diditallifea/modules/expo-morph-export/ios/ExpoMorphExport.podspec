@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
     'SWIFT_COMPILATION_MODE' => 'wholemodule'
   }
-  s.source_files   = 'ios/**/*.{h,m,mm,swift}'
-  s.resources      = 'ios/Resources/*'
+  s.source_files   = '**/*.{h,m,mm,swift}'
+  s.resources      = 'Resources/*'
   s.dependency 'ExpoModulesCore'
 end
