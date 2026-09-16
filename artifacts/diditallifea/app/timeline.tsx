@@ -4,9 +4,11 @@ import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
 import { getCumulativePhotoAlignments, PHOTO_ALIGNMENT_ASPECT_RATIO } from '@/lib/photo-alignment';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, GestureResponderEvent, PanResponder, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MorphExport from '../modules/expo-morph-export';
 
 const dateLabel = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date));
@@ -29,6 +31,7 @@ export default function TimelineScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
   const [morphSpeed, setMorphSpeed] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const [morphStageSize, setMorphStageSize] = useState({ width: 0, height: 0 });
   const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
@@ -80,10 +83,16 @@ export default function TimelineScreen() {
   const nextAlignment = photoAlignments[morphFrame + 1] ?? currentAlignment;
 
   const shareStory = async () => {
+    const caption = `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`;
     try {
-      await Share.share({
-        message: `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`,
-        ...(last?.isSample ? {} : last ? { url: last.uri } : {}),
+      if (Platform.OS === 'web' || !last || last.isSample) {
+        await Share.share({ message: caption });
+        return;
+      }
+      await Sharing.shareAsync(last.uri, {
+        dialogTitle: `Share ${project.name}`,
+        mimeType: 'image/jpeg',
+        UTI: 'public.jpeg',
       });
     } catch {
       Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
@@ -91,19 +100,43 @@ export default function TimelineScreen() {
   };
 
   const shareMorph = async () => {
-    const frame = photos[morphFrame] ?? photos[0];
-    if (!frame) {
+    if (photos.length < 2) {
       showMessage('Add a frame first', 'Capture at least one progress photo before sharing a preview.');
       return;
     }
+    if (photos.some((photo) => photo.isSample)) {
+      showMessage('Sample story', 'Add your own progress photos before exporting a morph video.');
+      return;
+    }
     try {
-      await Share.share({
-        title: `${project.name} morph preview`,
-        message: `${project.name} — morph preview frame ${morphFrame + 1} of ${photos.length}.\n\nShared from MyLifelens.`,
-        ...(frame.isSample ? {} : { url: frame.uri }),
+      if (Platform.OS === 'web') {
+        await Share.share({ message: `${project.name} morph preview — shared from MyLifelens.` });
+        return;
+      }
+      setIsPlaying(false);
+      setIsExporting(true);
+      const exportResult = await MorphExport.exportMorph({
+        frames: photos.map((photo, index) => ({
+          uri: photo.uri,
+          ...(photoAlignments[index] ?? { x: 0, y: 0, scale: 1 }),
+        })),
+        width: Math.round(720 * PHOTO_ALIGNMENT_ASPECT_RATIO),
+        height: 720,
+        fps: 24,
+        speed: morphSpeed,
+        holdSeconds: 0.7,
+        transitionSeconds: 1.1,
       });
-    } catch {
-      showMessage('Sharing unavailable', 'We could not open the system share sheet right now.');
+      await Sharing.shareAsync(exportResult.uri, {
+        dialogTitle: `Share ${project.name} morph preview`,
+        mimeType: 'video/mp4',
+        UTI: 'public.mpeg-4',
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'The video could not be created on this device.';
+      showMessage('Video export failed', detail);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -144,7 +177,7 @@ export default function TimelineScreen() {
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
 
         <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>
-           <View
+             <View
              onLayout={(event) => {
                const { width, height } = event.nativeEvent.layout;
                setMorphStageSize({ width, height });
@@ -172,7 +205,7 @@ export default function TimelineScreen() {
             </View>
             <View style={styles.speedTicks}>{speedOptions.map((option) => <Pressable key={option} onPress={() => setMorphSpeed(option)}><Text style={[styles.speedTick, { color: option === morphSpeed ? colors.primary : '#C7D4CB' }]}>{option}×</Text></Pressable>)}</View>
           </View>
-          <Pressable testID="share-morph-button" onPress={() => void shareMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed]}><Feather name="share-2" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>Share preview</Text></Pressable>
+           <Pressable testID="share-morph-button" disabled={isExporting} onPress={() => void shareMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed, isExporting && { opacity: 0.55 }]}><Feather name="share-2" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>{isExporting ? 'Creating video…' : 'Share morph video'}</Text></Pressable>
           <View style={styles.progressRow}>{photos.map((photo, index) => <View key={photo.id} style={[styles.progressSegment, { backgroundColor: index <= morphFrame ? colors.primary : '#53635D' }]} />)}</View>
         </View>
 

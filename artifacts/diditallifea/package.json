@@ -57,7 +57,9 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "expo-modules-core": "~3.0.20",
     "expo-notifications": "^0.32.17",
+    "expo-sharing": "~14.0.8",
     "react-native-purchases": "10.8.0"
   }
 }

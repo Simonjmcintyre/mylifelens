@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["ExpoMorphExportModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.morphexport.ExpoMorphExportModule"]
+  }
+}

@@ -5,6 +5,7 @@ import { formatReminderShort, getReminderHours, Project, useProjects } from '@/c
 import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import React, { useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,9 +41,15 @@ export default function ProjectScreen() {
   const shareProject = async () => {
     try {
       const latest = project.photos[project.photos.length - 1];
-      await Share.share({
-        message: `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nTracking progress with MyLifelens.`,
-        ...(latest?.isSample ? {} : latest ? { url: latest.uri } : {}),
+      const caption = `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nTracking progress with MyLifelens.`;
+      if (Platform.OS === 'web' || !latest || latest.isSample) {
+        await Share.share({ message: caption });
+        return;
+      }
+      await Sharing.shareAsync(latest.uri, {
+        dialogTitle: `Share ${project.name}`,
+        mimeType: 'image/jpeg',
+        UTI: 'public.jpeg',
       });
     } catch {
       Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
