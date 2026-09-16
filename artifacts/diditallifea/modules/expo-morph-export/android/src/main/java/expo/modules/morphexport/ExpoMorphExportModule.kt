@@ -252,7 +252,13 @@ private data class MorphSource(val uri: Uri, val x: Float, val y: Float, val sca
         }
         if (rotation != 0f) postRotate(rotation)
       }
-      val bitmap = if (orientation == ExifInterface.ORIENTATION_NORMAL) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { decoded.recycle() }
+      val bitmap = if (orientation == ExifInterface.ORIENTATION_NORMAL) {
+        decoded
+      } else {
+        Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true).also { transformed ->
+          if (transformed !== decoded) decoded.recycle()
+        }
+      }
       val meta = MorphSource(uri, this.x, this.y, this.scale)
       return FrameRender(meta, bitmap, createBlurredBackdrop(bitmap, width, height))
   }
