@@ -15,6 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.mylifelens.app",
+      "buildNumber": "1",
       "supportsTablet": false
     },
     "android": {
@@ -33,7 +34,13 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#D89C3F"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

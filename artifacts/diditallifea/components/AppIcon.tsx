@@ -32,6 +32,7 @@ export type AppIconName =
   | 'rotate-ccw'
   | 'share-2'
   | 'sun'
+  | 'trash-2'
   | 'upload'
   | 'x';
 
@@ -104,6 +105,8 @@ function IconDrawing({ name }: { name: AppIconName }) {
       return <><Circle cx="18" cy="5" r="3" /><Circle cx="6" cy="12" r="3" /><Circle cx="18" cy="19" r="3" /><Line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><Line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></>;
     case 'sun':
       return <><Circle cx="12" cy="12" r="4" /><Path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" /></>;
+    case 'trash-2':
+      return <><Polyline points="3 6 5 6 21 6" /><Path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2" /></>;
     case 'upload':
       return <><Path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><Polyline points="17 8 12 3 7 8" /><Line x1="12" y1="3" x2="12" y2="15" /></>;
     case 'x':

@@ -2,10 +2,13 @@ import { PhotoImage } from '@/components/PhotoImage';
 import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
+import { getCumulativePhotoAlignments, PHOTO_ALIGNMENT_ASPECT_RATIO } from '@/lib/photo-alignment';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import * as Sharing from 'expo-sharing';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, GestureResponderEvent, PanResponder, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MorphExport from '../modules/expo-morph-export';
 
 const dateLabel = (date: string) =>
   new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(date));
@@ -28,9 +31,12 @@ export default function TimelineScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
   const [morphSpeed, setMorphSpeed] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
+  const [morphStageSize, setMorphStageSize] = useState({ width: 0, height: 0 });
   const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
   const photos = project?.photos ?? [];
+  const photoAlignments = useMemo(() => getCumulativePhotoAlignments(photos), [photos]);
   const speedOptions = [0.5, 1, 1.5, 2];
   const speedPanResponder = useRef(
     PanResponder.create({
@@ -55,16 +61,17 @@ export default function TimelineScreen() {
       toValue: 1,
       duration: 1800 / morphSpeed,
       easing: Easing.inOut(Easing.ease),
-      useNativeDriver: true,
+      useNativeDriver: false,
     });
     animation.start(({ finished }) => {
       if (!finished) return;
       if (morphFrame < photos.length - 2) {
+        morphBlend.setValue(0);
         setMorphFrame((current) => current + 1);
       } else {
+        morphBlend.setValue(0);
         setIsPlaying(false);
         setMorphFrame(photos.length - 1);
-        morphBlend.setValue(0);
       }
     });
     return () => animation.stop();
@@ -73,12 +80,21 @@ export default function TimelineScreen() {
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
+  const currentAlignment = photoAlignments[morphFrame] ?? { x: 0, y: 0, scale: 1 };
+  const nextAlignment = photoAlignments[morphFrame + 1] ?? currentAlignment;
 
   const shareStory = async () => {
+    const caption = `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`;
     try {
-      await Share.share({
-        message: `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`,
-        ...(last?.isSample ? {} : last ? { url: last.uri } : {}),
+      if (Platform.OS === 'web' || !last || last.isSample) {
+        await Share.share({ message: caption });
+        return;
+      }
+      const watermarked = await MorphExport.exportWatermarkedImage({ uri: last.uri });
+      await Sharing.shareAsync(watermarked.uri, {
+        dialogTitle: `Share ${project.name}`,
+        mimeType: 'image/jpeg',
+        UTI: 'public.jpeg',
       });
     } catch {
       Alert.alert('Sharing unavailable', 'We could not open the sharing sheet right now.');
@@ -86,19 +102,43 @@ export default function TimelineScreen() {
   };
 
   const shareMorph = async () => {
-    const frame = photos[morphFrame] ?? photos[0];
-    if (!frame) {
+    if (photos.length < 2) {
       showMessage('Add a frame first', 'Capture at least one progress photo before sharing a preview.');
       return;
     }
+    if (photos.some((photo) => photo.isSample)) {
+      showMessage('Sample story', 'Add your own progress photos before exporting a morph video.');
+      return;
+    }
     try {
-      await Share.share({
-        title: `${project.name} morph preview`,
-        message: `${project.name} — morph preview frame ${morphFrame + 1} of ${photos.length}.\n\nShared from MyLifelens.`,
-        ...(frame.isSample ? {} : { url: frame.uri }),
+      if (Platform.OS === 'web') {
+        await Share.share({ message: `${project.name} morph preview — shared from MyLifelens.` });
+        return;
+      }
+      setIsPlaying(false);
+      setIsExporting(true);
+      const exportResult = await MorphExport.exportMorph({
+        frames: photos.map((photo, index) => ({
+          uri: photo.uri,
+          ...(photoAlignments[index] ?? { x: 0, y: 0, scale: 1 }),
+        })),
+        width: Math.round(720 * PHOTO_ALIGNMENT_ASPECT_RATIO),
+        height: 720,
+        fps: 24,
+        speed: morphSpeed,
+        holdSeconds: 0.7,
+        transitionSeconds: 1.1,
       });
-    } catch {
-      showMessage('Sharing unavailable', 'We could not open the system share sheet right now.');
+      await Sharing.shareAsync(exportResult.uri, {
+        dialogTitle: `Share ${project.name} morph preview`,
+        mimeType: 'video/mp4',
+        UTI: 'public.mpeg-4',
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'The video could not be created on this device.';
+      showMessage('Video export failed', detail);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -139,9 +179,15 @@ export default function TimelineScreen() {
         <View style={styles.heading}><Text style={[styles.eyebrow, { color: colors.primary }]}>THE FULL STORY</Text><Text style={[styles.title, { color: colors.foreground }]}>{project.name}</Text><Text style={[styles.subtitle, { color: colors.mutedForeground }]}>A stitched view of {project.photos.length} moments, from first frame to now.</Text></View>
 
         <View style={[styles.morphCard, { backgroundColor: colors.foreground }]}>
-          <View style={styles.morphStage}>
-            {photos.length > 0 ? <PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphImage} /> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
-            {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphImage} /></Animated.View>}
+             <View
+             onLayout={(event) => {
+               const { width, height } = event.nativeEvent.layout;
+               setMorphStageSize({ width, height });
+             }}
+             style={styles.morphStage}
+           >
+             {photos.length > 0 ? <View style={styles.morphFrame}><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /></View> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
+             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame + 1].uri} style={[styles.morphImage, { transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]} /></Animated.View>}
             {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
           </View>
           <View style={styles.morphControls}>
@@ -161,7 +207,7 @@ export default function TimelineScreen() {
             </View>
             <View style={styles.speedTicks}>{speedOptions.map((option) => <Pressable key={option} onPress={() => setMorphSpeed(option)}><Text style={[styles.speedTick, { color: option === morphSpeed ? colors.primary : '#C7D4CB' }]}>{option}×</Text></Pressable>)}</View>
           </View>
-          <Pressable testID="share-morph-button" onPress={() => void shareMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed]}><Feather name="share-2" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>Share preview</Text></Pressable>
+           <Pressable testID="share-morph-button" disabled={isExporting} onPress={() => void shareMorph()} style={({ pressed }) => [styles.downloadButton, { borderColor: '#53635D' }, pressed && styles.pressed, isExporting && { opacity: 0.55 }]}><Feather name="share-2" size={16} color={colors.background} /><Text style={[styles.downloadText, { color: colors.background }]}>{isExporting ? 'Creating video…' : 'Share morph video'}</Text></Pressable>
           <View style={styles.progressRow}>{photos.map((photo, index) => <View key={photo.id} style={[styles.progressSegment, { backgroundColor: index <= morphFrame ? colors.primary : '#53635D' }]} />)}</View>
         </View>
 
@@ -190,7 +236,9 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Inter_700Bold', fontSize: 34, letterSpacing: -1.5, marginTop: 10 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20, marginTop: 10 },
   morphCard: { marginHorizontal: 20, borderRadius: 21, padding: 12, overflow: 'hidden' },
-  morphStage: { height: 290, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphStage: { aspectRatio: PHOTO_ALIGNMENT_ASPECT_RATIO, borderRadius: 15, overflow: 'hidden', position: 'relative', backgroundColor: '#21313A' },
+  morphFrame: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  morphBackdrop: { ...StyleSheet.absoluteFillObject, opacity: 0.82, transform: [{ scale: 1.12 }] },
   morphImage: { width: '100%', height: '100%' },
   morphOverlay: { ...StyleSheet.absoluteFillObject },
   morphEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center' },

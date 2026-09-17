@@ -88,3 +88,95 @@ workflows:
           ./gradlew bundleRelease
     artifacts:
       - android/app/build/outputs/**/*.aab
+  mylifelens-ios:
+    name: MyLifelens iOS
+    working_directory: artifacts/diditallifea
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: MyLifelens Apple
+    environment:
+      ios_signing:
+        certificates:
+          - mylifelens_distribution
+        provisioning_profiles:
+          - mylifelens_app_store_profile
+      node: v22.13.1
+      xcode: latest
+      vars:
+        BUNDLE_ID: com.mylifelens.app
+    scripts:
+      - name: Install workspace dependencies
+        script: |
+          cd "$CM_BUILD_DIR"
+          npx --yes pnpm@10.26.1 install --frozen-lockfile
+      - name: Configure RevenueCat iOS public key
+        script: |
+          python3 - <<'PY'
+          import os
+          import re
+          import shlex
+          from pathlib import Path
+
+          workspace = Path(os.environ["CM_BUILD_DIR"])
+          api_key = os.environ.get("EXPO_PUBLIC_REVENUECAT_IOS_API_KEY", "").strip()
+
+          if not api_key:
+              replit_config = workspace / ".replit"
+              config_text = replit_config.read_text()
+              match = re.search(
+                  r'^EXPO_PUBLIC_REVENUECAT_IOS_API_KEY\s*=\s*"([^"]+)"\s*$',
+                  config_text,
+                  re.MULTILINE,
+              )
+              if match:
+                  api_key = match.group(1).strip()
+
+          if not api_key:
+              raise SystemExit(
+                  "EXPO_PUBLIC_REVENUECAT_IOS_API_KEY is not configured"
+              )
+
+          env_file = workspace / ".codemagic-revenuecat-ios.env"
+          env_file.write_text(
+              "export EXPO_PUBLIC_REVENUECAT_IOS_API_KEY="
+              + shlex.quote(api_key)
+              + "\n"
+          )
+          env_file.chmod(0o600)
+          print("RevenueCat iOS public key configured")
+          PY
+      - name: Generate iOS project
+        script: |
+          source "$CM_BUILD_DIR/.codemagic-revenuecat-ios.env"
+          BUILD_VERSION=$(python3 -c 'import os; print(max(1, int(os.getenv("BUILD_NUMBER", "1"))))')
+          python3 -c 'import json, sys; path = "app.json"; data = json.load(open(path)); build_version = str(sys.argv[1]); data["expo"]["ios"]["buildNumber"] = build_version; data["expo"]["version"] = f"1.0.{build_version}"; open(path, "w").write(json.dumps(data, indent=2) + "\n")' "$BUILD_VERSION"
+          echo "Generating iOS build $BUILD_VERSION"
+          npx --yes pnpm@10.26.1 exec expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+          cd ..
+      - name: Install iOS signing certificate
+        script: |
+          keychain initialize
+          keychain add-certificates
+      - name: Set up iOS code signing
+        script: |
+          xcode-project use-profiles
+      - name: Build iOS IPA
+        script: |
+          source "$CM_BUILD_DIR/.codemagic-revenuecat-ios.env"
+          WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
+          if [ -z "$WORKSPACE" ]; then
+            echo "No generated Xcode workspace found"
+            exit 1
+          fi
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Building workspace $WORKSPACE with scheme $SCHEME"
+          xcode-project build-ipa --workspace "$WORKSPACE" --scheme "$SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration

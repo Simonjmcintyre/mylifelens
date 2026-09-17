@@ -14,9 +14,10 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
-import { Alert } from 'react-native';
+import { Alert, useColorScheme } from 'react-native';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -40,14 +41,18 @@ try {
 }
 
 function RootLayoutNav() {
+  const colorScheme = useColorScheme();
   return (
-    <Stack screenOptions={{ headerShown: false, headerBackTitle: 'Back' }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="project" />
-      <Stack.Screen name="capture" />
-      <Stack.Screen name="timeline" />
-      <Stack.Screen name="privacy-policy" />
-    </Stack>
+    <>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, headerBackTitle: 'Back' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="project" />
+        <Stack.Screen name="capture" />
+        <Stack.Screen name="timeline" />
+        <Stack.Screen name="privacy-policy" />
+      </Stack>
+    </>
   );
 }
 

@@ -12,6 +12,15 @@ expo-env.d.ts
 # Native
 ios/
 android/
+!modules/expo-morph-export/ios/
+!modules/expo-morph-export/ios/Resources/
+!modules/expo-morph-export/ios/Resources/*.png
+!modules/expo-morph-export/android/
+!modules/expo-morph-export/android/src/
+!modules/expo-morph-export/android/src/main/
+!modules/expo-morph-export/android/src/main/res/
+!modules/expo-morph-export/android/src/main/res/drawable-nodpi/
+!modules/expo-morph-export/android/src/main/res/drawable-nodpi/*.png
 *.orig.*
 *.jks
 *.p8
