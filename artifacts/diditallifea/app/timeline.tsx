@@ -66,11 +66,12 @@ export default function TimelineScreen() {
     animation.start(({ finished }) => {
       if (!finished) return;
       if (morphFrame < photos.length - 2) {
+        morphBlend.setValue(0);
         setMorphFrame((current) => current + 1);
       } else {
+        morphBlend.setValue(0);
         setIsPlaying(false);
         setMorphFrame(photos.length - 1);
-        morphBlend.setValue(0);
       }
     });
     return () => animation.stop();
