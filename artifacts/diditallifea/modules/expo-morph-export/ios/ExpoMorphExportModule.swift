@@ -147,10 +147,10 @@ private func render(_ current: MorphSource, next: MorphSource?, progress: CGFloa
   let blended: CIImage
   if let next {
     let second = compose(next)
-    blended = second.applyingFilter("CIBlendWithAlphaMask", parameters: [
-      kCIInputBackgroundImageKey: first,
-      kCIInputMaskImageKey: CIImage(color: CIColor(red: progress, green: progress, blue: progress)).cropped(to: canvas(width, height))
+    let fadedSecond = second.applyingFilter("CIColorMatrix", parameters: [
+      "inputAVector": CIVector(x: 0, y: 0, z: 0, w: progress)
     ])
+    blended = fadedSecond.composited(over: first)
   } else {
     blended = first
   }
