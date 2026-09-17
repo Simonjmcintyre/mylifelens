@@ -366,7 +366,14 @@ private fun drawWatermark(canvas: Canvas, icon: Bitmap, wordmark: Bitmap, width:
   val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(184, 7, 17, 31) }
   canvas.drawRoundRect(left, top, left + pillWidth, top + pillHeight, 12f * scale, 12f * scale, background)
   val iconRect = RectF(left + padding, top + padding, left + padding + iconSize, top + padding + iconSize)
-  canvas.drawBitmap(icon, null, iconRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+  val iconInset = 0.8f * scale
+  val clippedIconRect = RectF(iconRect).apply { inset(iconInset, iconInset) }
+  canvas.save()
+  canvas.clipPath(Path().apply {
+    addRoundRect(clippedIconRect, 8.5f * scale, 8.5f * scale, Path.Direction.CW)
+  })
+  canvas.drawBitmap(icon, null, clippedIconRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+  canvas.restore()
   val wordmarkTop = top + (pillHeight - wordmarkHeight) / 2f
   val wordmarkRect = RectF(iconRect.right + gap, wordmarkTop, iconRect.right + gap + wordmarkWidth, wordmarkTop + wordmarkHeight)
   canvas.drawBitmap(wordmark, null, wordmarkRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
