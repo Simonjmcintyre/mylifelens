@@ -61,7 +61,7 @@ export default function TimelineScreen() {
       toValue: 1,
       duration: 1800 / morphSpeed,
       easing: Easing.inOut(Easing.ease),
-      useNativeDriver: true,
+      useNativeDriver: false,
     });
     animation.start(({ finished }) => {
       if (!finished) return;
