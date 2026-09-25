@@ -1,14 +1,20 @@
 import { AppIcon } from '@/components/AppIcon';
 import { useColors } from '@/hooks/useColors';
-import { isRevenueCatTestMode, useSubscription } from '@/lib/revenuecat';
+import {
+  isRevenueCatTestMode,
+  REVENUECAT_ENTITLEMENT_IDENTIFIER,
+  useSubscription,
+} from '@/lib/revenuecat';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import type { PurchasesPackage } from 'react-native-purchases';
@@ -34,6 +40,7 @@ const TERMS_OF_USE_URL =
 export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const {
     monthlyPackage,
     annualPackage,
@@ -58,12 +65,11 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
     }
   }, [visible]);
 
-  const selectedPackage =
-    [annualPackage, monthlyPackage].find(
-      (item) => item?.identifier === selectedPackageIdentifier,
-    ) ??
-    annualPackage ??
-    monthlyPackage;
+  const selectedPackage = selectedPackageIdentifier
+    ? ([annualPackage, monthlyPackage].find(
+        (item) => item?.identifier === selectedPackageIdentifier,
+      ) ?? null)
+    : annualPackage ?? monthlyPackage;
   const isBusy = isPurchasing || isRestoring;
   const savings =
     annualPackage && monthlyPackage
@@ -94,12 +100,18 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
     setShowConfirmation(false);
     setActionMessage(null);
     try {
-      await purchase(selectedPackage);
-      setActionMessage('Pro is active. You can now create unlimited projects.');
+      const customerInfo = await purchase(selectedPackage);
+      if (customerInfo.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER]) {
+        onClose();
+      } else {
+        setActionMessage(
+          'Your purchase did not activate Pro yet. Try Restore purchases. If Pro stays locked, contact support rather than buying again.',
+        );
+      }
     } catch (purchaseError) {
       if ((purchaseError as { userCancelled?: boolean }).userCancelled) return;
       setActionMessage(
-        purchaseError instanceof Error ? purchaseError.message : 'The purchase could not be completed.',
+        'Pro could not be activated. If Apple confirmed your purchase, try Restore purchases. Do not buy again; contact support if Pro stays locked.',
       );
     }
   };
@@ -117,14 +129,15 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
     setActionMessage(null);
     try {
       const customerInfo = await restore();
-      const restored = customerInfo.entitlements.active.pro !== undefined;
-      setActionMessage(
-        restored ? 'Your Pro access has been restored.' : 'No previous Pro purchase was found.',
-      );
-    } catch (restoreError) {
-      setActionMessage(
-        restoreError instanceof Error ? restoreError.message : 'Purchases could not be restored.',
-      );
+      if (customerInfo.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER]) {
+        onClose();
+      } else {
+        setActionMessage(
+          'No active Pro access was found. If Apple confirmed your purchase, contact support rather than buying again.',
+        );
+      }
+    } catch {
+      setActionMessage('Pro could not be restored. Please contact support rather than buying again.');
     }
   };
 
@@ -134,7 +147,7 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
         <View
           style={[
             styles.sheet,
-            { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 18) + 12 },
+            { backgroundColor: colors.card, maxHeight: height - insets.top - 16 },
           ]}
         >
           <View style={styles.handle} />
@@ -152,6 +165,11 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
             </Pressable>
           </View>
 
+          <ScrollView
+            style={styles.sheetScroll}
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 12 }}
+            showsVerticalScrollIndicator={false}
+          >
           <Text style={[styles.eyebrow, { color: colors.primary }]}>MYLIFELENS PRO</Text>
           <Text style={[styles.title, { color: colors.foreground }]}>
             {isSubscribed ? 'Your full story is unlocked.' : 'Make room for every story.'}
@@ -180,7 +198,10 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
           )}
           {!actionMessage && !!error && (
             <View style={[styles.message, { backgroundColor: colors.background }]}>
-              <Text style={[styles.messageText, { color: colors.destructive }]}>{error}</Text>
+              <Text style={[styles.messageText, { color: colors.destructive }]}>
+                Subscriptions could not be checked right now. Please reopen the app and try again,
+                or contact support if this continues.
+              </Text>
             </View>
           )}
 
@@ -222,11 +243,11 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
                         )}
                       </View>
                       <Text style={[styles.planDetail, { color: colors.mutedForeground }]}>
-                        {plan.package ? plan.detail : 'Not available'}
+                        {plan.package ? plan.detail : isLoading ? 'Loading price…' : 'Currently unavailable'}
                       </Text>
                     </View>
                     <Text style={[styles.planPrice, { color: colors.foreground }]}>
-                      {plan.package?.product.priceString ?? '—'}
+                      {plan.package?.product.priceString ?? (isLoading ? '…' : '—')}
                     </Text>
                   </Pressable>
                 );
@@ -307,6 +328,7 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
               <Text style={[styles.legalLink, { color: colors.primary }]}>Terms of Use</Text>
             </Pressable>
           </View>
+          </ScrollView>
         </View>
       </View>
 
@@ -353,6 +375,7 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 22, paddingTop: 12 },
+  sheetScroll: { flexShrink: 1 },
   handle: { width: 38, height: 4, borderRadius: 2, backgroundColor: '#C9C3B8', alignSelf: 'center' },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 },
   iconWrap: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
