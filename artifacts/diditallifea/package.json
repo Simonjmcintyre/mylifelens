@@ -57,6 +57,8 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "expo-file-system": "~19.0.24",
+    "expo-media-library": "~18.2.1",
     "expo-modules-core": "~3.0.20",
     "expo-notifications": "^0.32.17",
     "expo-sharing": "~14.0.8",

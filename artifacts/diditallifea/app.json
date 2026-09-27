@@ -35,6 +35,14 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow MyLifelens to organise photos into your project albums.",
+          "savePhotosPermission": "Allow MyLifelens to save new photos into your project albums.",
+          "granularPermissions": ["photo"]
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
