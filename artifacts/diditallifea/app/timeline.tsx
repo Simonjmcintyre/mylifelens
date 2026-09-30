@@ -21,6 +21,9 @@ const showMessage = (title: string, message: string) => {
   Alert.alert(title, message);
 };
 
+const MORPH_HOLD_MS = 700;
+const MORPH_TRANSITION_MS = 1100;
+
 export default function TimelineScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -30,11 +33,16 @@ export default function TimelineScreen() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [morphFrame, setMorphFrame] = useState(0);
+  const [overlayFrame, setOverlayFrame] = useState(1);
+  const [awaitingFrame, setAwaitingFrame] = useState<number | null>(null);
   const [morphSpeed, setMorphSpeed] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
   const [morphStageSize, setMorphStageSize] = useState({ width: 0, height: 0 });
   const speedTrackWidth = useRef(0);
   const morphBlend = useRef(new Animated.Value(0)).current;
+  const morphSpeedRef = useRef(morphSpeed);
+  const handoffToken = useRef(0);
+  morphSpeedRef.current = morphSpeed;
   const photos = project?.photos ?? [];
   const photoAlignments = useMemo(() => getCumulativePhotoAlignments(photos), [photos]);
   const speedOptions = [0.5, 1, 1.5, 2];
@@ -55,33 +63,48 @@ export default function TimelineScreen() {
   }
 
   useEffect(() => {
-    if (!isPlaying || photos.length < 2 || morphFrame >= photos.length - 1) return;
-    morphBlend.setValue(0);
-    const animation = Animated.timing(morphBlend, {
-      toValue: 1,
-      duration: 1800 / morphSpeed,
-      easing: Easing.inOut(Easing.ease),
-      useNativeDriver: false,
-    });
+    if (!isPlaying || photos.length < 2 || morphFrame >= photos.length - 1 || awaitingFrame !== null) return;
+    const speed = morphSpeedRef.current;
+    const animation = Animated.sequence([
+      Animated.delay(MORPH_HOLD_MS / speed),
+      Animated.timing(morphBlend, {
+        toValue: 1,
+        duration: MORPH_TRANSITION_MS / speed,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ]);
     animation.start(({ finished }) => {
       if (!finished) return;
-      if (morphFrame < photos.length - 2) {
-        morphBlend.setValue(0);
-        setMorphFrame((current) => current + 1);
-      } else {
-        morphBlend.setValue(0);
-        setIsPlaying(false);
-        setMorphFrame(photos.length - 1);
-      }
+      const nextFrame = morphFrame + 1;
+      // Keep the fully visible overlay on screen until the new base image is ready.
+      setAwaitingFrame(nextFrame);
+      setMorphFrame(nextFrame);
     });
     return () => animation.stop();
-  }, [isPlaying, morphBlend, morphFrame, morphSpeed, photos.length]);
+  }, [isPlaying, morphBlend, morphFrame, awaitingFrame, photos.length]);
+
+  const onMorphFrameLoaded = (loadedFrame: number) => {
+    if (awaitingFrame !== loadedFrame) return;
+    const token = ++handoffToken.current;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (handoffToken.current !== token) return;
+      morphBlend.setValue(0);
+      // Let the native opacity update land before changing the overlay's source.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (handoffToken.current !== token) return;
+        setOverlayFrame(loadedFrame + 1);
+        setAwaitingFrame(null);
+        if (loadedFrame === photos.length - 1) setIsPlaying(false);
+      }));
+    }));
+  };
 
   if (!project) return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={{ color: colors.foreground }}>Project not found</Text></View>;
   const first = project.photos[0];
   const last = project.photos[project.photos.length - 1];
   const currentAlignment = photoAlignments[morphFrame] ?? { x: 0, y: 0, scale: 1 };
-  const nextAlignment = photoAlignments[morphFrame + 1] ?? currentAlignment;
+  const nextAlignment = photoAlignments[overlayFrame] ?? currentAlignment;
 
   const shareStory = async () => {
     const caption = `${project.name} — ${project.photos.length} ${project.photos.length === 1 ? 'frame' : 'frames'} from start to finish.\n\nSee the journey with MyLifelens.`;
@@ -126,8 +149,8 @@ export default function TimelineScreen() {
         height: 720,
         fps: 24,
         speed: morphSpeed,
-        holdSeconds: 0.7,
-        transitionSeconds: 1.1,
+        holdSeconds: MORPH_HOLD_MS / 1000,
+        transitionSeconds: MORPH_TRANSITION_MS / 1000,
       });
       await Sharing.shareAsync(exportResult.uri, {
         dialogTitle: `Share ${project.name} morph preview`,
@@ -152,15 +175,21 @@ export default function TimelineScreen() {
       return;
     }
     if (morphFrame >= photos.length - 1) {
+      handoffToken.current += 1;
       setMorphFrame(0);
+      setOverlayFrame(1);
+      setAwaitingFrame(null);
       morphBlend.setValue(0);
     }
     setIsPlaying(true);
   };
 
   const resetMorph = () => {
+    handoffToken.current += 1;
     setIsPlaying(false);
     setMorphFrame(0);
+    setOverlayFrame(1);
+    setAwaitingFrame(null);
     morphBlend.stopAnimation();
     morphBlend.setValue(0);
   };
@@ -186,8 +215,8 @@ export default function TimelineScreen() {
              }}
              style={styles.morphStage}
            >
-             {photos.length > 0 ? <View style={styles.morphFrame}><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /></View> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
-             {photos.length > 1 && morphFrame < photos.length - 1 && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[morphFrame + 1].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame + 1].uri} style={[styles.morphImage, { transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]} /></Animated.View>}
+              {photos.length > 0 ? <View style={styles.morphFrame}><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[morphFrame]?.uri ?? photos[0].uri} onLoadEnd={() => onMorphFrameLoaded(morphFrame)} style={[styles.morphImage, { transform: [{ translateX: currentAlignment.x * morphStageSize.width }, { translateY: currentAlignment.y * morphStageSize.height }, { scale: currentAlignment.scale }] }]} /></View> : <View style={styles.morphEmpty}><Feather name="film" size={27} color={colors.mutedForeground} /><Text style={[styles.morphEmptyText, { color: colors.background }]}>Add photos to build your morph</Text></View>}
+              {photos.length > 1 && overlayFrame < photos.length && <Animated.View style={[styles.morphOverlay, { opacity: morphBlend }]}><PhotoImage uri={photos[overlayFrame].uri} style={styles.morphBackdrop} blurRadius={20} /><PhotoImage uri={photos[overlayFrame].uri} style={[styles.morphImage, { transform: [{ translateX: nextAlignment.x * morphStageSize.width }, { translateY: nextAlignment.y * morphStageSize.height }, { scale: nextAlignment.scale }] }]} /></Animated.View>}
             {photos.length > 0 && <View style={[styles.morphBadge, { backgroundColor: colors.primary }]}><Feather name="play" size={12} color={colors.primaryForeground} /><Text style={[styles.morphBadgeText, { color: colors.primaryForeground }]}>{isPlaying ? 'MORPHING' : 'MORPH PREVIEW'}</Text></View>}
           </View>
           <View style={styles.morphControls}>

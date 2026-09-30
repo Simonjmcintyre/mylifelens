@@ -12,17 +12,19 @@ export function PhotoImage({
   style,
   resizeMode = 'cover',
   blurRadius = 0,
+  onLoadEnd,
 }: {
   uri: string;
   style?: StyleProp<ViewStyle>;
   resizeMode?: 'cover' | 'contain';
   blurRadius?: number;
+  onLoadEnd?: () => void;
 }) {
   const colors = useColors();
   const source = sampleSources[uri] ?? { uri };
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.muted }, style]}>
-      <Image source={source} resizeMode={resizeMode} blurRadius={blurRadius} style={styles.image} />
+      <Image source={source} resizeMode={resizeMode} blurRadius={blurRadius} style={styles.image} onLoadEnd={onLoadEnd} />
     </View>
   );
 }
