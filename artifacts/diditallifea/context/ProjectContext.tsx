@@ -3,6 +3,11 @@ import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import type { PhotoAlignment } from '@/lib/photo-alignment';
+import {
+  normalizeStoredPhotoUri,
+  removeStoredProjectPhoto,
+  removeStoredProjectPhotos,
+} from '@/lib/project-photo-storage';
 
 export type ProgressPhoto = {
   id: string;
@@ -105,6 +110,10 @@ const seedProjects: Project[] = [
 const normalizeProject = (project: Project): Project => ({
   ...project,
   reminderIntervalHours: getReminderHours(project),
+  photos: project.photos.map((photo) => ({
+    ...photo,
+    uri: normalizeStoredPhotoUri(photo.uri),
+  })),
 });
 
 async function cancelNotification(notificationId?: string) {
@@ -247,6 +256,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         await persist(next);
       },
       deletePhoto: async (projectId, photoId) => {
+        const photo = projects.find((project) => project.id === projectId)?.photos.find((item) => item.id === photoId);
         await persist(
           projects.map((project) =>
             project.id === projectId
@@ -254,11 +264,23 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
               : project,
           ),
         );
+        if (photo) {
+          try {
+            await removeStoredProjectPhoto(photo.uri);
+          } catch (error) {
+            console.warn('Could not remove the app copy of a deleted photo', error);
+          }
+        }
       },
       deleteProject: async (projectId) => {
         const project = projects.find((item) => item.id === projectId);
         await cancelNotification(project?.scheduledNotificationId);
         await persist(projects.filter((item) => item.id !== projectId));
+        try {
+          await removeStoredProjectPhotos(projectId);
+        } catch (error) {
+          console.warn('Could not remove app copies for a deleted project', error);
+        }
       },
       setReminder: async (projectId, intervalHours, enabled) => {
         const project = projects.find((item) => item.id === projectId);

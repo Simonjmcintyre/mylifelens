@@ -3,10 +3,11 @@ import { useProjects } from '@/context/ProjectContext';
 import { useColors } from '@/hooks/useColors';
 import { AppIcon as Feather } from '@/components/AppIcon';
 import { PHOTO_ALIGNMENT_ASPECT_RATIO } from '@/lib/photo-alignment';
+import { savePhotoToProjectAlbum, storeProjectPhoto } from '@/lib/project-photo-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Image, PanResponder, PanResponderGestureState, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, PanResponder, PanResponderGestureState, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CaptureScreen() {
@@ -17,6 +18,8 @@ export default function CaptureScreen() {
   const project = projects.find((item) => item.id === projectId);
   const previous = project?.photos[project.photos.length - 1];
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'camera' | 'library' | null>(null);
   const [opacity, setOpacity] = useState(0.45);
   const [ghostOffset, setGhostOffset] = useState({ x: 0, y: 0 });
   const [photoScale, setPhotoScale] = useState(1);
@@ -48,39 +51,83 @@ export default function CaptureScreen() {
   const previousLabel = useMemo(() => (previous ? `Frame ${String(project?.photos.length).padStart(2, '0')}` : 'No previous frame'), [previous, project?.photos.length]);
 
   const choosePhoto = async (mode: 'camera' | 'library') => {
-    const permission = mode === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Permission needed', `Allow access to your ${mode === 'camera' ? 'camera' : 'photo library'} to add a progress frame.`);
-      return;
-    }
-    const result = mode === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: false });
-    if (!result.canceled && result.assets[0]) {
-      ghostOffsetRef.current = { x: 0, y: 0 };
-      setGhostOffset({ x: 0, y: 0 });
-      setPhotoScale(1);
-      setSelectedUri(result.assets[0].uri);
+    try {
+      // Android's system picker grants access only to the chosen photo; it needs
+      // no library-read permission. Keep the existing iOS permission flow.
+      if (mode === 'camera' || Platform.OS !== 'android') {
+        const permission = mode === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert('Permission needed', `Allow access to your ${mode === 'camera' ? 'camera' : 'photo library'} to add a progress frame.`);
+          return;
+        }
+      }
+      const result = mode === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85, allowsEditing: false })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85, allowsEditing: false, legacy: false });
+      if (!result.canceled && result.assets[0]) {
+        ghostOffsetRef.current = { x: 0, y: 0 };
+        setGhostOffset({ x: 0, y: 0 });
+        setPhotoScale(1);
+        setSelectedUri(result.assets[0].uri);
+        setSelectedFileName(result.assets[0].fileName ?? null);
+        setSelectedSource(mode);
+      }
+    } catch {
+      Alert.alert('Could not open photos', 'The camera or photo picker could not be opened. Please try again.');
     }
   };
 
   const savePhoto = async () => {
-    if (!selectedUri || !project) return;
+    if (!selectedUri || !project || isSaving) return;
     setIsSaving(true);
-    await addPhoto(project.id, {
-      uri: selectedUri,
-      capturedAt: new Date().toISOString(),
-      note,
-      ...(previous && previewSize.width > 0 && previewSize.height > 0
-        ? {
-            alignmentOffset: {
-              x: ghostOffset.x / previewSize.width,
-              y: ghostOffset.y / previewSize.height,
-              scale: photoScale,
-            },
-          }
-        : {}),
-    });
+    let storedUri: string;
+    try {
+      storedUri = await storeProjectPhoto(selectedUri, project.id, selectedFileName);
+      await addPhoto(project.id, {
+        uri: storedUri,
+        capturedAt: new Date().toISOString(),
+        note,
+        ...(previous && previewSize.width > 0 && previewSize.height > 0
+          ? {
+              alignmentOffset: {
+                x: ghostOffset.x / previewSize.width,
+                y: ghostOffset.y / previewSize.height,
+                scale: photoScale,
+              },
+            }
+          : {}),
+      });
+    } catch {
+      setIsSaving(false);
+      Alert.alert('Could not save photo', 'Your photo was not added to the project. Please try again.');
+      return;
+    }
+
+    if (selectedSource === 'camera') {
+      try {
+        const duplicateName = projects.some(
+          (item) => item.id !== project.id && item.name.trim().toLowerCase() === project.name.trim().toLowerCase(),
+        );
+        const albumResult = await savePhotoToProjectAlbum(storedUri, project.name, project.id, duplicateName);
+        if (!albumResult.saved) {
+          setIsSaving(false);
+          Alert.alert('Photo saved in your project', albumResult.reason, [
+            { text: 'OK', onPress: () => router.replace({ pathname: '/project', params: { id: project.id } }) },
+          ]);
+          return;
+        }
+      } catch {
+        setIsSaving(false);
+        Alert.alert(
+          'Photo saved in your project',
+          'A copy could not be added to your phone’s Photos/Gallery album. You can still see it in MyLifelens.',
+          [{ text: 'OK', onPress: () => router.replace({ pathname: '/project', params: { id: project.id } }) }],
+        );
+        return;
+      }
+    }
     setIsSaving(false);
     router.replace({ pathname: '/project', params: { id: project.id } });
   };

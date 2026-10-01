@@ -60,6 +60,8 @@
     "expo-modules-core": "~3.0.20",
     "expo-notifications": "^0.32.17",
     "expo-sharing": "~14.0.8",
-    "react-native-purchases": "10.8.0"
+    "react-native-purchases": "10.8.0",
+    "expo-file-system": "~19.0.24",
+    "expo-media-library": "~18.2.1"
   }
 }

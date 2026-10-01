@@ -85,7 +85,8 @@ workflows:
         script: |
           source "$CM_BUILD_DIR/.codemagic-revenuecat.env"
           cd android
-          ./gradlew bundleRelease
+          ./gradlew :expo-project-albums:testReleaseUnitTest bundleRelease
+          python3 ../scripts/check-android-media-permissions.py app/build/intermediates
     artifacts:
       - android/app/build/outputs/**/*.aab
   mylifelens-ios:
